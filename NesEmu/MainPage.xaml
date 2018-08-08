@@ -8,6 +8,6 @@
     mc:Ignorable="d">
 
     <Grid Background="{ThemeResource ApplicationPageBackgroundThemeBrush}">
-
+        <Image x:Name="image" HorizontalAlignment="Left" Height="240" VerticalAlignment="Top" Width="240"/>
     </Grid>
 </Page>
