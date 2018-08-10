@@ -5,10 +5,10 @@ using Windows.Storage;
 
 namespace NesEmu
 {
-    class Cartridge
+    public class Cartridge
     {
-        public byte[] PRG;
-        public byte[] CHR; // includes the case of CHRRAM
+        public byte[] PRG { get; set; }
+        public byte[] CHR { get; set; } // includes the case of CHRRAM
         bool UsesCHRRAM { get; set; }
 
         // https://wiki.nesdev.com/w/index.php/INES#iNES_file_format

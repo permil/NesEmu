@@ -6,13 +6,16 @@ using System.Threading.Tasks;
 
 namespace NesEmu
 {
+    using NesEmu.Mappers;
     using System.Diagnostics;
     using static CPU.AddressMode;
     using static CPU.Mnemonic;
 
-    class CPU
+    public class CPU
     {
-        Memory memory = new Memory();
+        readonly Console console;
+        readonly Memory memory;
+
         public int Cycles { get; private set; }
 
         byte A, X, Y, S;
@@ -81,6 +84,12 @@ namespace NesEmu
         class Memory
         {
             private readonly byte[] WRAM = new byte[0x0800];
+            private readonly Mapper mapper;
+       
+            public Memory(Mapper mapper)
+            {
+                this.mapper = mapper;
+            }
 
             public byte Read(ushort addr)
             {
@@ -88,9 +97,25 @@ namespace NesEmu
                 {
                     return WRAM[addr % 0x800];
                 }
+                else if (addr <= 0x2007)
+                {
+                    // TODO: PPU
+                    if (addr == 0x2002)
+                    {
+                        return 0xFF;
+                    }
+                    else
+                    {
+                        return 0;
+                    }
+                }
+                else if (addr >= 0x4020)
+                {
+                    return mapper.Read(addr);
+                }
                 else
                 {
-                    // TODO:
+                    Debug.Assert(false, "TODO");
                     return 0;
                 }
             }
@@ -101,16 +126,23 @@ namespace NesEmu
                 {
                     WRAM[addr % 0x800] = data;
                 }
+                else if (addr <= 0x2007)
+                {
+                    // TODO: PPU
+                }
                 else
                 {
-                    // TODO:
+                    Debug.Assert(false, "TODO");
                 }
             }
         }
 
-        public CPU()
+        public CPU(Console console)
         {
-            PC = memory.Read(0xFFFC);
+            this.console = console;
+            memory = new Memory(console.Mapper);
+
+            PC = 0x8000;//memory.Read(0xFFFC);
             Cycles = 0;
             S = 0xFF;
         }
@@ -126,13 +158,24 @@ namespace NesEmu
             var inst = instructions[opCode];
             int cycles = inst.cycles;
 
+            Debug.WriteLine(inst.mnemonic + ", PC:0x" + PC.ToString("x4"));
+
             ushort addr = 0;
             switch (inst.addrMode)
             {
                 case Absolute:
-                    ushort lo = memory.Read((ushort)(PC + 1));
-                    ushort hi = memory.Read((ushort)(PC + 2));
-                    addr = (ushort)(hi << 8 | lo);
+                    {
+                        ushort lo = memory.Read((ushort)(PC + 1));
+                        ushort hi = memory.Read((ushort)(PC + 2));
+                        addr = (ushort)(hi << 8 | lo);
+                    }
+                    break;
+                case AbsoluteX:
+                    {
+                        ushort lo = memory.Read((ushort)(PC + 1));
+                        ushort hi = memory.Read((ushort)(PC + 2));
+                        addr = (ushort)((hi << 8 | lo) + X);
+                    }
                     break;
                 case Immediate:
                     addr = (ushort)(PC + 1);
@@ -140,10 +183,10 @@ namespace NesEmu
                 case Implied:
                     break;
                 case Relative:
-                    addr = (ushort)((PC + 2) + (sbyte)memory.Read((ushort)(PC + 1)));
+                    addr = (ushort)(PC + (sbyte)memory.Read((ushort)(PC + 1)));
                     break;
                 default:
-                    Debug.WriteLine("address mode is not implemented yet: " + inst.mnemonic);
+                    Debug.WriteLine("address mode is not implemented yet: " + inst.addrMode);
                     break;
             }
 
@@ -155,7 +198,7 @@ namespace NesEmu
                 case CPX:   Compare(ref X, addr);   break;
                 case INX:   Increment(ref X);       break;
                 case JMP:
-                    PC = addr;
+                    PC = (ushort)(addr - inst.addrMode.Length());
                     break;
                 case BNE:
                     if (!Z)
@@ -170,10 +213,9 @@ namespace NesEmu
                     }
                     break;
                 default:
-                    Debug.WriteLine("opcode is not implemented yet: " + inst.mnemonic);
+                    Debug.WriteLine("mnemonic is not implemented yet: " + inst.mnemonic);
                     break;
             }
-            Debug.WriteLine(inst.mnemonic);
 
             PC += inst.addrMode.Length();
             Cycles += cycles;

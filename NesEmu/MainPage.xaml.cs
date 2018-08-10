@@ -5,6 +5,7 @@ using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Controls;
 using System.Diagnostics;
 using System.Threading.Tasks;
+using NesEmu.Mappers;
 
 namespace NesEmu
 {
@@ -59,6 +60,27 @@ namespace NesEmu
             Debug.WriteLine(cartridge.PRG.Length);
             Debug.WriteLine(cartridge.CHR.Length);
             Debug.WriteLine(cartridge.Mapper);
+
+            Mapper mapper = null;
+            switch (cartridge.Mapper)
+            {
+                case 0:
+                    mapper = new NROMMapper(cartridge);
+                    break;
+            }
+
+            if (mapper == null)
+            {
+                Debug.Assert(false, "mapper is not implemented yet: " + cartridge.Mapper);
+                return;
+            }
+
+            Console console = new Console(mapper);
+
+            while (true)
+            {
+                console.Step();
+            }
         }
 
         async Task<Cartridge> LoadNESFileAsync()
