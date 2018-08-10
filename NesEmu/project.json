@@ -1,6 +1,8 @@
 ﻿{
   "dependencies": {
-    "Microsoft.NETCore.UniversalWindowsPlatform": "5.1.0"
+    "Microsoft.Net.Compilers": "2.8.2",
+    "Microsoft.NETCore.UniversalWindowsPlatform": "5.1.0",
+    "System.ValueTuple": "4.5.0"
   },
   "frameworks": {
     "uap10.0": {}

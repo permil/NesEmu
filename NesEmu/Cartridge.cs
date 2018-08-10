@@ -1,8 +1,5 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
-using System.Text;
 using System.Threading.Tasks;
 using Windows.Storage;
 
@@ -12,7 +9,7 @@ namespace NesEmu
     {
         public byte[] PRG;
         public byte[] CHR; // includes the case of CHRRAM
-        private bool UsesCHRRAM { get; set; }
+        bool UsesCHRRAM { get; set; }
 
         // https://wiki.nesdev.com/w/index.php/INES#iNES_file_format
 
@@ -24,10 +21,10 @@ namespace NesEmu
         // |||||+---1: 512 - byte trainer at $7000 -$71FF(stored before PRG data)
         // ||||+----1: Ignore mirroring control or above mirroring bit; instead provide four - screen VRAM
         // ++++---- - Lower nybble of mapper number
-        private byte flag6;
+        byte flag6;
         public bool VerticalMirroring { get { return (flag6 & 0x01) != 0; } }
         public bool HasBattery        { get { return (flag6 & 0x02) != 0; } }
-        private bool ContainsTrainer   { get { return (flag6 & 0x04) != 0; } }
+        bool ContainsTrainer          { get { return (flag6 & 0x04) != 0; } }
 
         // 76543210
         // ||||||||
@@ -35,7 +32,7 @@ namespace NesEmu
         // ||||||+--PlayChoice - 10(8KB of Hint Screen data stored after CHR data)
         // ||||++---If equal to 2, flags 8 - 15 are in NES 2.0 format
         // ++++---- - Upper nybble of mapper number
-        private byte flag7;
+        byte flag7;
         public int Mapper { get { return flag7 & 0xF0 | (flag6 >> 4 & 0xF); } }
 
         public static async Task<Cartridge> LoadFromNES(StorageFile file)
@@ -52,8 +49,8 @@ namespace NesEmu
             return cartridge;
         }
 
-        private Cartridge() { }
-        private static Cartridge Create(BinaryReader reader)
+        Cartridge() { }
+        static Cartridge Create(BinaryReader reader)
         {
             if (reader.ReadUInt32() != 0x1A53454E)
             {

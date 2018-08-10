@@ -1,28 +1,13 @@
 ﻿using System;
-using System.Collections.Generic;
 using System.IO;
-using System.Linq;
 using System.Runtime.InteropServices.WindowsRuntime;
-using Windows.Foundation;
-using Windows.Foundation.Collections;
-using Windows.UI.Xaml;
 using Windows.UI.Xaml.Media.Imaging;
 using Windows.UI.Xaml.Controls;
-using Windows.UI.Xaml.Controls.Primitives;
-using Windows.UI.Xaml.Data;
-using Windows.UI.Xaml.Input;
-using Windows.UI.Xaml.Media;
-using Windows.UI.Xaml.Navigation;
 using System.Diagnostics;
 using System.Threading.Tasks;
 
-// 空白ページのアイテム テンプレートについては、http://go.microsoft.com/fwlink/?LinkId=402352&clcid=0x409 を参照してください
-
 namespace NesEmu
 {
-    /// <summary>
-    /// それ自体で使用できる空白ページまたはフレーム内に移動できる空白ページ。
-    /// </summary>
     public sealed partial class MainPage : Page
     {
         public MainPage()
@@ -68,7 +53,7 @@ namespace NesEmu
             Start();
         }
 
-        private async void Start()
+        async void Start()
         {
             Cartridge cartridge = await LoadNESFileAsync();
             Debug.WriteLine(cartridge.PRG.Length);
@@ -76,7 +61,7 @@ namespace NesEmu
             Debug.WriteLine(cartridge.Mapper);
         }
 
-        private async Task<Cartridge> LoadNESFileAsync()
+        async Task<Cartridge> LoadNESFileAsync()
         {
             var filePicker = new Windows.Storage.Pickers.FileOpenPicker();
             filePicker.FileTypeFilter.Add(".nes");
