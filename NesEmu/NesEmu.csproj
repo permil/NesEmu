@@ -103,6 +103,7 @@
     </Compile>
     <Compile Include="Mappers\Mapper.cs" />
     <Compile Include="Mappers\NROMMapper.cs" />
+    <Compile Include="PPU.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <ItemGroup>

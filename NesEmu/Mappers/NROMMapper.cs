@@ -11,20 +11,12 @@ namespace NesEmu.Mappers
     {
         public NROMMapper(Cartridge cartridge) : base(cartridge) { }
 
-        public override byte Read(ushort addr)
+        public override byte ReadPRG(ushort addr)
         {
-            if (addr >= 0x8000)
-            {
-                return cartridge.PRG[(addr - 0x8000) % cartridge.PRG.Length];
-            }
-            else
-            {
-                Debug.Assert(false, "not implemented yet");
-                return 0;
-            }
+            return cartridge.PRG[addr % cartridge.PRG.Length];
         }
 
-        public override void Write(ushort addr, byte data)
+        public override void WritePRG(ushort addr, byte data)
         {
             throw new NotImplementedException();
         }

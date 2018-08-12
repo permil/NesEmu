@@ -10,12 +10,14 @@ namespace NesEmu
     public class Console
     {
         public CPU CPU { get; private set; }
+        public PPU PPU { get; private set; }
         public Mapper Mapper { get; private set; }
 
         public Console(Mapper mapper)
         {
             Mapper = mapper;
             CPU = new CPU(this);
+            PPU = new PPU(this);
         }
 
         public void Step()

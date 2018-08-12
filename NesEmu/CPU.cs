@@ -84,11 +84,11 @@ namespace NesEmu
         class Memory
         {
             private readonly byte[] WRAM = new byte[0x0800];
-            private readonly Mapper mapper;
-       
-            public Memory(Mapper mapper)
+            private readonly Console console;
+
+            public Memory(Console console)
             {
-                this.mapper = mapper;
+                this.console = console;
             }
 
             public byte Read(ushort addr)
@@ -99,19 +99,11 @@ namespace NesEmu
                 }
                 else if (addr <= 0x2007)
                 {
-                    // TODO: PPU
-                    if (addr == 0x2002)
-                    {
-                        return 0xFF;
-                    }
-                    else
-                    {
-                        return 0;
-                    }
+                    return console.PPU.Read(addr);
                 }
-                else if (addr >= 0x4020)
+                else if (addr >= 0x8000)
                 {
-                    return mapper.Read(addr);
+                    return console.Mapper.ReadPRG((ushort)(addr - 0x8000));
                 }
                 else
                 {
@@ -128,7 +120,7 @@ namespace NesEmu
                 }
                 else if (addr <= 0x2007)
                 {
-                    // TODO: PPU
+                    console.PPU.Write(addr, data);
                 }
                 else
                 {
@@ -140,7 +132,7 @@ namespace NesEmu
         public CPU(Console console)
         {
             this.console = console;
-            memory = new Memory(console.Mapper);
+            memory = new Memory(console);
 
             PC = 0x8000;//memory.Read(0xFFFC);
             Cycles = 0;

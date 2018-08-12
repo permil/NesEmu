@@ -14,43 +14,6 @@ namespace NesEmu
         public MainPage()
         {
             this.InitializeComponent();
-
-
-            // BitmapImageの準備
-            int width = 240;
-            int height = 240;
-            WriteableBitmap bitmap = new WriteableBitmap(width, height);
-            this.image.Source = bitmap;
-
-            // 計算用のバイト列の準備
-            int pixelsSize = (int)(width * height * 4);
-            byte[] pixels = new byte[pixelsSize];
-
-            // バイト列に色情報を入れる
-            byte value = 0;
-            for (int x = 0; x < width * height * 4; x = x + 4)
-            {
-                byte blue = value;
-                byte green = value;
-                byte red = value;
-                byte alpha = 255;
-                pixels[x] = blue;
-                pixels[x + 1] = green;
-                pixels[x + 2] = red;
-                pixels[x + 3] = alpha;
-                value = (byte)((value + 1) % 240);
-            }
-
-            // バイト列をBitmapImageに変換する
-            using (var pixelStream = bitmap.PixelBuffer.AsStream())
-            {
-                pixelStream.Seek(0, SeekOrigin.Begin);
-                pixelStream.Write(pixels, 0, pixels.Length);
-            }
-
-            // Redraw the WriteableBitmap
-            bitmap.Invalidate();
-
             Start();
         }
 
@@ -77,10 +40,38 @@ namespace NesEmu
 
             Console console = new Console(mapper);
 
-            while (true)
+
+            int width = 256;
+            int height = 240;
+            WriteableBitmap bitmap = new WriteableBitmap(width, height);
+            this.image.Source = bitmap;
+
+//            while (true)
+            for (int loop = 0; loop < 300; loop++) // FIXME:
             {
                 console.Step();
             }
+
+            /*----- FIXME: dummy implementation -----*/
+            byte[] rawPixels = console.PPU.GetPixels();
+            byte[] pixels = new byte[rawPixels.Length * 4];
+
+            for (int i = 0; i < rawPixels.Length; i++)
+            {
+                pixels[i * 4]     = (byte)(rawPixels[i] * 64);
+                pixels[i * 4 + 1] = (byte)(rawPixels[i] * 64);
+                pixels[i * 4 + 2] = (byte)(rawPixels[i] * 64);
+                pixels[i * 4 + 3] = 255;
+            }
+
+            using (var pixelStream = bitmap.PixelBuffer.AsStream())
+            {
+                pixelStream.Seek(0, SeekOrigin.Begin);
+                pixelStream.Write(pixels, 0, pixels.Length);
+            }
+
+            bitmap.Invalidate(); // Redraw the WriteableBitmap
+            /*----- FIXME: dummy implementation -----*/
         }
 
         async Task<Cartridge> LoadNESFileAsync()
