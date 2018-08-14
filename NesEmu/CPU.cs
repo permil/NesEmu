@@ -70,15 +70,18 @@ namespace NesEmu
         };
         Dictionary<int, (Mnemonic mnemonic, AddressMode addrMode, int cycles)> instructions = new Dictionary<int, (Mnemonic mnemonic, AddressMode addrMode, int cycles)>() {
             { 0x10, (BPL, Relative, 3) },
+            { 0x29, (AND, Immediate, 2) },
             { 0x4C, (JMP, Absolute, 3) },
             { 0x8D, (STA, Absolute, 4) },
             { 0xA2, (LDX, Immediate, 2) },
             { 0xA9, (LDA, Immediate, 2) },
             { 0xAD, (LDA, Absolute, 4) },
             { 0xBD, (LDA, AbsoluteX, 4) },
+            { 0xCE, (DEC, Absolute, 6) },
             { 0xD0, (BNE, Relative, 2) },
             { 0xE0, (CPX, Immediate, 2) },
-            { 0xE8, (INX, Implied, 2) }
+            { 0xE8, (INX, Implied, 2) },
+            { 0xEE, (INC, Absolute, 6) }
         };
 
         class Memory
@@ -103,8 +106,7 @@ namespace NesEmu
                 }
                 else if (addr == 0x4016 || addr == 0x4017)
                 {
-                    // TODO: button handling
-                    return 0;
+                    return console.Controller.ReadState();
                 }
                 else if (addr >= 0x8000)
                 {
@@ -127,9 +129,9 @@ namespace NesEmu
                 {
                     console.PPU.Write(addr, data);
                 }
-                else if (addr == 0x4016 || addr == 0x4017)
+                else if (addr == 0x4016)
                 {
-                    // TODO: button handling
+                    console.Controller.WriteState(data);
                 }
                 else
                 {
@@ -153,7 +155,7 @@ namespace NesEmu
             byte opCode = memory.Read(PC);
             if (!instructions.ContainsKey(opCode))
             {
-                Debug.WriteLine("opcode is not implemented yet: 0x" + opCode.ToString("x4"));
+                Debug.WriteLine("opcode is not implemented yet: 0x" + opCode.ToString("x2"));
                 return 0;
             }
             var inst = instructions[opCode];
@@ -196,7 +198,25 @@ namespace NesEmu
                 case LDA:   Load(ref A, addr);      break;
                 case LDX:   Load(ref X, addr);      break;
                 case STA:   Store(ref A, addr);     break;
+                case AND:
+                    A &= memory.Read(addr);
+                    UpdateNZ(A);
+                    break;
                 case CPX:   Compare(ref X, addr);   break;
+                case DEC:
+                    {
+                        byte data = memory.Read(addr);
+                        memory.Write(addr, --data);
+                        UpdateNZ(data);
+                    }
+                    break;
+                case INC:
+                    {
+                        byte data = memory.Read(addr);
+                        memory.Write(addr, ++data);
+                        UpdateNZ(data);
+                    }
+                    break;
                 case INX:   Increment(ref X);       break;
                 case JMP:
                     PC = (ushort)(addr - inst.addrMode.Length());
