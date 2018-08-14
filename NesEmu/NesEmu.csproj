@@ -97,12 +97,14 @@
     </Compile>
     <Compile Include="Cartridge.cs" />
     <Compile Include="Console.cs" />
+    <Compile Include="Controller.cs" />
     <Compile Include="CPU.cs" />
     <Compile Include="MainPage.xaml.cs">
       <DependentUpon>MainPage.xaml</DependentUpon>
     </Compile>
     <Compile Include="Mappers\Mapper.cs" />
     <Compile Include="Mappers\NROMMapper.cs" />
+    <Compile Include="Palette.cs" />
     <Compile Include="PPU.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

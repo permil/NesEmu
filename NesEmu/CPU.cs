@@ -101,6 +101,11 @@ namespace NesEmu
                 {
                     return console.PPU.Read(addr);
                 }
+                else if (addr == 0x4016 || addr == 0x4017)
+                {
+                    // TODO: button handling
+                    return 0;
+                }
                 else if (addr >= 0x8000)
                 {
                     return console.Mapper.ReadPRG((ushort)(addr - 0x8000));
@@ -121,6 +126,10 @@ namespace NesEmu
                 else if (addr <= 0x2007)
                 {
                     console.PPU.Write(addr, data);
+                }
+                else if (addr == 0x4016 || addr == 0x4017)
+                {
+                    // TODO: button handling
                 }
                 else
                 {
@@ -144,7 +153,7 @@ namespace NesEmu
             byte opCode = memory.Read(PC);
             if (!instructions.ContainsKey(opCode))
             {
-                Debug.WriteLine("opcode is not implemented yet: " + opCode);
+                Debug.WriteLine("opcode is not implemented yet: 0x" + opCode.ToString("x4"));
                 return 0;
             }
             var inst = instructions[opCode];

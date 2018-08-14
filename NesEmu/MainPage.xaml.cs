@@ -6,14 +6,22 @@ using Windows.UI.Xaml.Controls;
 using System.Diagnostics;
 using System.Threading.Tasks;
 using NesEmu.Mappers;
+using Windows.UI;
+using Windows.UI.Xaml;
+using Windows.UI.Xaml.Input;
+using Windows.UI.Core;
+using Windows.System;
 
 namespace NesEmu
 {
     public sealed partial class MainPage : Page
     {
+        Console console;
+
         public MainPage()
         {
             this.InitializeComponent();
+            Window.Current.CoreWindow.KeyDown += OnKeyDown;
             Start();
         }
 
@@ -38,9 +46,10 @@ namespace NesEmu
                 return;
             }
 
-            Console console = new Console(mapper);
+            console = new Console(mapper);
 
 
+            Palette palette = new Palette();
             int width = 256;
             int height = 240;
             WriteableBitmap bitmap = new WriteableBitmap(width, height);
@@ -58,9 +67,10 @@ namespace NesEmu
 
             for (int i = 0; i < rawPixels.Length; i++)
             {
-                pixels[i * 4]     = (byte)(rawPixels[i] * 64);
-                pixels[i * 4 + 1] = (byte)(rawPixels[i] * 64);
-                pixels[i * 4 + 2] = (byte)(rawPixels[i] * 64);
+                Color color = palette.Colors[rawPixels[i]];
+                pixels[i * 4]     = color.B;
+                pixels[i * 4 + 1] = color.G;
+                pixels[i * 4 + 2] = color.R;
                 pixels[i * 4 + 3] = 255;
             }
 
@@ -81,6 +91,21 @@ namespace NesEmu
             var file = await filePicker.PickSingleFileAsync();
 
             return await Cartridge.LoadFromNES(file);
+        }
+
+        void OnKeyDown(object sender, KeyEventArgs e)
+        {
+            switch (e.VirtualKey)
+            {
+                case VirtualKey.Z:      console.Controller.SetState(Controller.Button.A, true);         break;
+                case VirtualKey.X:      console.Controller.SetState(Controller.Button.B, true);         break;
+                case VirtualKey.Q:      console.Controller.SetState(Controller.Button.Select, true);    break;
+                case VirtualKey.W:      console.Controller.SetState(Controller.Button.Start, true);     break;
+                case VirtualKey.Up:     console.Controller.SetState(Controller.Button.Up, true);        break;
+                case VirtualKey.Down:   console.Controller.SetState(Controller.Button.Down, true);      break;
+                case VirtualKey.Left:   console.Controller.SetState(Controller.Button.Left, true);      break;
+                case VirtualKey.Right:  console.Controller.SetState(Controller.Button.Right, true);     break;
+            }
         }
     }
 }

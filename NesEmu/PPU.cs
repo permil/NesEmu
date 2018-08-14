@@ -81,6 +81,14 @@ namespace NesEmu
             memory = new Memory(console.Mapper);
         }
 
+        byte LookupSpriteColor(byte data)
+        {
+            int colorNum = data & 0x3;
+            int paletteNum = (data >> 2) & 0x3;
+
+            return memory.Read((ushort)(colorNum == 0 ? 0x3F00 : 0x3F11 + 4 * paletteNum + colorNum - 1));
+        }
+
         [Obsolete("Dummy Implementation")]
         public byte[] GetPixels()
         {
@@ -104,7 +112,8 @@ namespace NesEmu
                     {
                         byte loBit = (byte)((pattern[0] >> (7 - xOffset)) & 1);
                         byte hiBit = (byte)((pattern[1] >> (7 - xOffset)) & 1);
-                        pixels[256 * (y + yOffset) + (x + xOffset)] = (byte)(((hiBit << 1) | loBit) & 0x03);
+                        byte colorNum = (byte)(((hiBit << 1) | loBit) & 0x03);
+                        pixels[256 * (y + yOffset) + (x + xOffset)] = LookupSpriteColor(colorNum);
                     }
                 }
             }
