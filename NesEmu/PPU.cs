@@ -81,6 +81,14 @@ namespace NesEmu
             memory = new Memory(console.Mapper);
         }
 
+        byte LookupBGColor(byte data)
+        {
+            int colorNum = data & 0x3;
+            int paletteNum = (data >> 2) & 0x3;
+
+            return memory.Read((ushort)(colorNum == 0 ? 0x3F00 : 0x3F01 + 4 * paletteNum + colorNum - 1));
+        }
+
         byte LookupSpriteColor(byte data)
         {
             int colorNum = data & 0x3;
@@ -93,34 +101,53 @@ namespace NesEmu
         public byte[] GetPixels()
         {
             byte[] pixels = new byte[256 * 240];
-            for (int i = 0; i < OAM.Length / 4; i += 4)
+
+            // BG
+            for (int y = 0; y < 240; y += 8)
             {
-                int y     = OAM[i];
-                int tile  = OAM[i + 1];
-                int attrs = OAM[i + 2];
-                int x     = OAM[i + 3];
-
-                for (int j = 0; j < 8; j++)
+                for (int x = 0; x < 256; x += 8)
                 {
-                    int yOffset = ((attrs & 0x80) == 0) ? j : 7 - j;
-                    ushort yAddr = (ushort)(0x1000 + tile * 16 + yOffset);
+                    byte tile  = memory.Read((ushort)(0x2000 + (256 / 8) * (y / 8) + (x / 8))); // FIXME: refer correct name table
+                    byte attrs = memory.Read((ushort)(0x23C0 + (256 / 8) * (y / 8) + (x / 8))); // FIXME: refer correct attr table
 
-                    // https://wiki.nesdev.com/w/index.php/PPU_pattern_tables
-                    byte[] pattern = new byte[2];
-                    pattern[0] = memory.Read(yAddr);
-                    pattern[1] = memory.Read((ushort)(yAddr + 8));
-                    for (int k = 0; k < 8; k++)
-                    {
-                        int xOffset = ((attrs & 0x40) == 0) ? k : 7 - k;
-                        byte loBit = (byte)((pattern[0] >> (7 - xOffset)) & 1);
-                        byte hiBit = (byte)((pattern[1] >> (7 - xOffset)) & 1);
-                        byte colorNum = (byte)(((hiBit << 1) | loBit) & 0x03);
-                        pixels[256 * (y + j) + (x + k)] = LookupSpriteColor(colorNum);
-                    }
+                    PutTile(pixels, (byte)x, (byte)y, tile, attrs, true);
                 }
             }
 
+            // Sprite
+            for (int i = 0; i < OAM.Length / 4; i += 4)
+            {
+                byte y     = OAM[i];
+                byte tile  = OAM[i + 1];
+                byte attrs = OAM[i + 2];
+                byte x     = OAM[i + 3];
+
+                PutTile(pixels, x, y, tile, attrs, false);
+            }
+
             return pixels;
+        }
+        [Obsolete("Dummy Implementation")]
+        public void PutTile(byte[] pixels, byte x, byte y, byte tile, byte attrs, bool bg)
+        {
+            for (int j = 0; j < 8; j++)
+            {
+                int yOffset = ((attrs & 0x80) == 0) ? j : 7 - j;
+                ushort yAddr = (ushort)((bg ? 0x0000 : 0x1000) + tile * 16 + yOffset);
+
+                // https://wiki.nesdev.com/w/index.php/PPU_pattern_tables
+                byte[] pattern = new byte[2];
+                pattern[0] = memory.Read(yAddr);
+                pattern[1] = memory.Read((ushort)(yAddr + 8));
+                for (int k = 0; k < 8; k++)
+                {
+                    int xOffset = ((attrs & 0x40) == 0) ? k : 7 - k;
+                    byte loBit = (byte)((pattern[0] >> (7 - xOffset)) & 1);
+                    byte hiBit = (byte)((pattern[1] >> (7 - xOffset)) & 1);
+                    byte colorNum = (byte)(((hiBit << 1) | loBit) & 0x03);
+                    pixels[256 * (y + j) + (x + k)] = (bg ? LookupBGColor(colorNum) : LookupSpriteColor(colorNum));
+                }
+            }
         }
 
         public byte Read(ushort addr)

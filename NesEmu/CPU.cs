@@ -73,11 +73,22 @@ namespace NesEmu
             { 0x29, (AND, Immediate, 2) },
             { 0x4C, (JMP, Absolute, 3) },
             { 0x69, (ADC, Immediate, 2) },
+            { 0x78, (SEI, Implied, 2) },
+            { 0x88, (DEY, Implied, 2) },
+            { 0x8A, (TXA, Implied, 2) },
             { 0x8D, (STA, Absolute, 4) },
+            { 0x98, (TYA, Implied, 2) },
+            { 0x9A, (TXS, Implied, 2) },
+            { 0xA0, (LDY, Immediate, 2) },
             { 0xA2, (LDX, Immediate, 2) },
+            { 0xA8, (TAY, Implied, 2) },
             { 0xA9, (LDA, Immediate, 2) },
+            { 0xAA, (TAX, Implied, 2) },
             { 0xAD, (LDA, Absolute, 4) },
+            { 0xBA, (TSX, Implied, 2) },
             { 0xBD, (LDA, AbsoluteX, 4) },
+            { 0xC8, (INY, Implied, 2) },
+            { 0xCA, (DEX, Implied, 2) },
             { 0xCE, (DEC, Absolute, 6) },
             { 0xD0, (BNE, Relative, 2) },
             { 0xE0, (CPX, Immediate, 2) },
@@ -203,7 +214,14 @@ namespace NesEmu
             {
                 case LDA:   Load(ref A, addr);      break;
                 case LDX:   Load(ref X, addr);      break;
+                case LDY:   Load(ref Y, addr);      break;
                 case STA:   Store(ref A, addr);     break;
+                case TAX:   Transfer(A, ref X);     break;
+                case TAY:   Transfer(A, ref Y);     break;
+                case TSX:   Transfer(S, ref X);     break;
+                case TXA:   Transfer(X, ref A);     break;
+                case TXS:   Transfer(X, ref S);     break;
+                case TYA:   Transfer(Y, ref A);     break;
                 case ADC:
                     {
                         byte data = memory.Read(addr);
@@ -226,6 +244,8 @@ namespace NesEmu
                         UpdateNZ(data);
                     }
                     break;
+                case DEX:   Decrement(ref X);       break;
+                case DEY:   Decrement(ref Y);       break;
                 case INC:
                     {
                         byte data = memory.Read(addr);
@@ -234,6 +254,7 @@ namespace NesEmu
                     }
                     break;
                 case INX:   Increment(ref X);       break;
+                case INY:   Increment(ref Y);       break;
                 case JMP:
                     PC = (ushort)(addr - inst.addrMode.Length());
                     break;
@@ -248,6 +269,9 @@ namespace NesEmu
                     {
                         PC = addr;
                     }
+                    break;
+                case SEI:
+                    // TODO:
                     break;
                 default:
                     Debug.WriteLine("mnemonic is not implemented yet: " + inst.mnemonic);
@@ -270,6 +294,12 @@ namespace NesEmu
             memory.Write(addr, reg);
         }
 
+        void Transfer(byte srcReg, ref byte dstReg)
+        {
+            dstReg = srcReg;
+            UpdateNZ(dstReg);
+        }
+
         void Compare(ref byte reg, ushort addr)
         {
             int diff = reg - memory.Read(addr);
@@ -283,6 +313,11 @@ namespace NesEmu
             UpdateNZ(reg);
         }
 
+        void Decrement(ref byte reg)
+        {
+            reg--;
+            UpdateNZ(reg);
+        }
 
         void UpdateNZ(byte value)
         {
