@@ -160,5 +160,14 @@ namespace NesEmu
                     break;
             }
         }
+
+        public void WriteOAMDMA(CPU.Memory cpuMemory, byte data)
+        {
+            ushort addr = (ushort)(data << 8);
+            for (int i = 0; i < 256; i++)
+            {
+                OAM[(OAMAddr + i) % OAM.Length] = cpuMemory.Read((ushort)(addr + i));
+            }
+        }
     }
 }

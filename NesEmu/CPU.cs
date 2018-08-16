@@ -72,6 +72,7 @@ namespace NesEmu
             { 0x10, (BPL, Relative, 3) },
             { 0x29, (AND, Immediate, 2) },
             { 0x4C, (JMP, Absolute, 3) },
+            { 0x69, (ADC, Immediate, 2) },
             { 0x8D, (STA, Absolute, 4) },
             { 0xA2, (LDX, Immediate, 2) },
             { 0xA9, (LDA, Immediate, 2) },
@@ -84,7 +85,7 @@ namespace NesEmu
             { 0xEE, (INC, Absolute, 6) }
         };
 
-        class Memory
+        public class Memory
         {
             private readonly byte[] WRAM = new byte[0x0800];
             private readonly Console console;
@@ -114,7 +115,7 @@ namespace NesEmu
                 }
                 else
                 {
-                    Debug.Assert(false, "TODO");
+                    Debug.Assert(false, "TODO: 0x" + addr.ToString("x4"));
                     return 0;
                 }
             }
@@ -129,13 +130,18 @@ namespace NesEmu
                 {
                     console.PPU.Write(addr, data);
                 }
+                else if (addr == 0x4014)
+                {
+                    console.PPU.WriteOAMDMA(this, data);
+                    // TODO: suspend 513 or 514 cycles
+                }
                 else if (addr == 0x4016)
                 {
                     console.Controller.WriteState(data);
                 }
                 else
                 {
-                    Debug.Assert(false, "TODO");
+                    Debug.Assert(false, "TODO: 0x" + addr.ToString("x4"));
                 }
             }
         }
@@ -198,6 +204,16 @@ namespace NesEmu
                 case LDA:   Load(ref A, addr);      break;
                 case LDX:   Load(ref X, addr);      break;
                 case STA:   Store(ref A, addr);     break;
+                case ADC:
+                    {
+                        byte data = memory.Read(addr);
+                        int sum = A + data + (C ? 1 : 0);
+                        C = sum > 0xFF;
+                        V = (~(A ^ data) & (A ^ (byte)sum) & 0x80) != 0; // https://stackoverflow.com/questions/29193303/6502-emulation-proper-way-to-implement-adc-and-sbc
+                        A = (byte)sum;
+                        UpdateNZ(A);
+                    }
+                    break;
                 case AND:
                     A &= memory.Read(addr);
                     UpdateNZ(A);
