@@ -100,20 +100,22 @@ namespace NesEmu
                 int attrs = OAM[i + 2];
                 int x     = OAM[i + 3];
 
-                for (int yOffset = 0; yOffset < 8; yOffset++)
+                for (int j = 0; j < 8; j++)
                 {
+                    int yOffset = ((attrs & 0x80) == 0) ? j : 7 - j;
                     ushort yAddr = (ushort)(0x1000 + tile * 16 + yOffset);
 
                     // https://wiki.nesdev.com/w/index.php/PPU_pattern_tables
                     byte[] pattern = new byte[2];
                     pattern[0] = memory.Read(yAddr);
                     pattern[1] = memory.Read((ushort)(yAddr + 8));
-                    for (int xOffset = 0; xOffset < 8; xOffset++)
+                    for (int k = 0; k < 8; k++)
                     {
+                        int xOffset = ((attrs & 0x40) == 0) ? k : 7 - k;
                         byte loBit = (byte)((pattern[0] >> (7 - xOffset)) & 1);
                         byte hiBit = (byte)((pattern[1] >> (7 - xOffset)) & 1);
                         byte colorNum = (byte)(((hiBit << 1) | loBit) & 0x03);
-                        pixels[256 * (y + yOffset) + (x + xOffset)] = LookupSpriteColor(colorNum);
+                        pixels[256 * (y + j) + (x + k)] = LookupSpriteColor(colorNum);
                     }
                 }
             }
