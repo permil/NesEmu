@@ -70,8 +70,10 @@ namespace NesEmu
         };
         Dictionary<int, (Mnemonic mnemonic, AddressMode addrMode, int cycles)> instructions = new Dictionary<int, (Mnemonic mnemonic, AddressMode addrMode, int cycles)>() {
             { 0x10, (BPL, Relative, 3) },
+            { 0x20, (JSR, Absolute, 6) },
             { 0x29, (AND, Immediate, 2) },
             { 0x4C, (JMP, Absolute, 3) },
+            { 0x60, (RTS, Implied, 6) },
             { 0x69, (ADC, Immediate, 2) },
             { 0x78, (SEI, Implied, 2) },
             { 0x88, (DEY, Implied, 2) },
@@ -258,6 +260,13 @@ namespace NesEmu
                 case JMP:
                     PC = (ushort)(addr - inst.addrMode.Length());
                     break;
+                case JSR:
+                    PushStack16((ushort)(PC - 1 + inst.addrMode.Length()));
+                    PC = (ushort)(addr - inst.addrMode.Length());
+                    break;
+                case RTS:
+                    PC = (ushort)(PullStack16() + 1 - inst.addrMode.Length());
+                    break;
                 case BNE:
                     if (!Z)
                     {
@@ -319,11 +328,41 @@ namespace NesEmu
             UpdateNZ(reg);
         }
 
+        #region Common utils
         void UpdateNZ(byte value)
         {
             N = ((value >> 7) & 1) == 1;
             Z = (value == 0);
         }
+
+        void PushStack(byte data)
+        {
+            memory.Write((ushort)(0x100 | S), data);
+            S--;
+        }
+
+        byte PullStack()
+        {
+            S++;
+            return memory.Read((ushort)(0x0100 | S));
+        }
+
+        void PushStack16(ushort data)
+        {
+            byte lo = (byte)(data & 0xFF);
+            byte hi = (byte)((data >> 8) & 0xFF);
+
+            PushStack(hi);
+            PushStack(lo);
+        }
+
+        ushort PullStack16()
+        {
+            byte lo = PullStack();
+            byte hi = PullStack();
+            return (ushort)((hi << 8) | lo);
+        }
+        #endregion
     }
 
     static class AddressModeExt
