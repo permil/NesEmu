@@ -22,6 +22,8 @@ namespace NesEmu
         readonly byte[] OAM = new byte[0x100];
         byte OAMAddr;
 
+        bool nmiOccurred;
+
         int scanline, cycle;
 
         // https://wiki.nesdev.com/w/index.php/PPU_registers#PPUCTRL
@@ -70,7 +72,7 @@ namespace NesEmu
                 }
                 else
                 {
-                    Debug.Assert(false, "Invalid PPU Memory Read: " + addr.ToString("x4"));
+                    Debug.Assert(false, "Invalid PPU Memory Read: 0x" + addr.ToString("x4"));
                     return 0;
                 }
             }
@@ -91,7 +93,7 @@ namespace NesEmu
                 }
                 else // Invalid Write
                 {
-                    Debug.Assert(false, "Invalid PPU Memory Write: " + addr.ToString("x4"));
+                    Debug.Assert(false, "Invalid PPU Memory Write: 0x" + addr.ToString("x4"));
                 }
             }
         }
@@ -103,12 +105,14 @@ namespace NesEmu
 
             scanline = -1;
             cycle = 0;
+            nmiOccurred = false;
         }
 
         public void Step()
         {
             if (scanline == 241 && cycle == 1) // https://wiki.nesdev.com/w/index.php/PPU_rendering#Vertical_blanking_lines_.28241-260.29
             {
+                nmiOccurred = true;
                 if (nmiEnabled)
                 {
                     console.CPU.NMIInterrupt = true;
@@ -191,20 +195,31 @@ namespace NesEmu
                     byte loBit = (byte)((pattern[0] >> (7 - xOffset)) & 1);
                     byte hiBit = (byte)((pattern[1] >> (7 - xOffset)) & 1);
                     byte colorNum = (byte)(((hiBit << 1) | loBit) & 0x03);
-                    pixels[256 * (y + j) + (x + k)] = (bg ? LookupBGColor(colorNum) : LookupSpriteColor(colorNum));
+
+                    int pixelIndex = 256 * (y + j) + (x + k);
+                    if (pixelIndex >= 0 && pixelIndex < pixels.Length)
+                    {
+                        pixels[pixelIndex] = (bg ? LookupBGColor(colorNum) : LookupSpriteColor(colorNum));
+                    }
                 }
             }
         }
 
         public byte Read(ushort addr)
         {
-            Debug.WriteLine("PPU Read - 0x" + addr.ToString("x4"));
             // TODO:
             switch (addr)
             {
                 case 0x2002:
-                    return 0xFF; // FIXME:
+                    {
+                        byte data = 0;
+                        data |= (byte)((nmiOccurred ? 1 : 0) << 7);
+                        nmiOccurred = false;
+                        // TODO: other statuses
+                        return data;
+                    }
                 default:
+                    Debug.WriteLine("PPU Read - 0x" + addr.ToString("x4"));
                     return 0; // TODO:
             }
         }
