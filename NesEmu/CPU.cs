@@ -71,34 +71,74 @@ namespace NesEmu
             BRK, NOP
         };
         Dictionary<int, (Mnemonic mnemonic, AddressMode addrMode, int cycles)> instructions = new Dictionary<int, (Mnemonic mnemonic, AddressMode addrMode, int cycles)>() {
+            { 0x01, (ORA, IndirectX, 6) },
+            { 0x05, (ORA, ZeroPage, 3) },
+            { 0x09, (ORA, Immediate, 2) },
+            { 0x0D, (ORA, Absolute, 4) },
             { 0x10, (BPL, Relative, 3) },
+            { 0x11, (ORA, IndirectY, 5) },
+            { 0x15, (ORA, ZeroPageX, 4) },
+            { 0x19, (ORA, ZeroPageY, 4) },
+            { 0x1D, (ORA, AbsoluteX, 4) },
             { 0x20, (JSR, Absolute, 6) },
+            { 0x24, (BIT, ZeroPage, 3) },
             { 0x29, (AND, Immediate, 2) },
+            { 0x2C, (BIT, Absolute, 4) },
+            { 0x30, (BMI, Relative, 2) },
             { 0x40, (RTI, Implied, 6) },
             { 0x4C, (JMP, Absolute, 3) },
+            { 0x50, (BVC, Relative, 2) },
             { 0x60, (RTS, Implied, 6) },
             { 0x69, (ADC, Immediate, 2) },
+            { 0x70, (BVS, Relative, 2) },
             { 0x78, (SEI, Implied, 2) },
+            { 0x81, (STA, IndirectX, 6) },
+            { 0x84, (STY, ZeroPage, 3) },
+            { 0x85, (STA, ZeroPage, 3) },
+            { 0x86, (STX, ZeroPage, 3) },
             { 0x88, (DEY, Implied, 2) },
             { 0x8A, (TXA, Implied, 2) },
+            { 0x8C, (STY, Absolute, 4) },
             { 0x8D, (STA, Absolute, 4) },
+            { 0x8E, (STX, Absolute, 4) },
+            { 0x90, (BCC, Relative, 2) },
+            { 0x91, (STA, IndirectY, 2) },
+            { 0x94, (STY, ZeroPageX, 4) },
+            { 0x95, (STA, ZeroPageX, 4) },
+            { 0x96, (STX, ZeroPageY, 4) },
             { 0x98, (TYA, Implied, 2) },
+            { 0x99, (STA, AbsoluteY, 5) },
             { 0x9A, (TXS, Implied, 2) },
+            { 0x9D, (STA, AbsoluteX, 5) },
             { 0xA0, (LDY, Immediate, 2) },
+            { 0xA1, (LDA, IndirectX, 6) },
             { 0xA2, (LDX, Immediate, 2) },
+            { 0xA5, (LDA, ZeroPage, 3) },
             { 0xA8, (TAY, Implied, 2) },
             { 0xA9, (LDA, Immediate, 2) },
             { 0xAA, (TAX, Implied, 2) },
             { 0xAD, (LDA, Absolute, 4) },
+            { 0xB0, (BCS, Relative, 2) },
+            { 0xB1, (LDA, IndirectY, 5) },
+            { 0XB5, (LDA, ZeroPageX, 4) },
+            { 0XB9, (LDA, AbsoluteY, 4) },
             { 0xBA, (TSX, Implied, 2) },
             { 0xBD, (LDA, AbsoluteX, 4) },
+            { 0xC0, (CPY, Immediate, 2) },
+            { 0xC4, (CPY, ZeroPage, 3) },
             { 0xC8, (INY, Implied, 2) },
+            { 0xC9, (CMP, Immediate, 2) },
             { 0xCA, (DEX, Implied, 2) },
+            { 0xCC, (CPY, Absolute, 4)},
             { 0xCE, (DEC, Absolute, 6) },
             { 0xD0, (BNE, Relative, 2) },
+            { 0xD8, (CLD, Implied, 2) },
             { 0xE0, (CPX, Immediate, 2) },
+            { 0xE4, (CPX, ZeroPage, 3) },
             { 0xE8, (INX, Implied, 2) },
-            { 0xEE, (INC, Absolute, 6) }
+            { 0xEC, (CPX, Absolute, 4) },
+            { 0xEE, (INC, Absolute, 6) },
+            { 0xF0, (BEQ, Relative, 2) }
         };
 
         public class Memory
@@ -124,6 +164,11 @@ namespace NesEmu
                 else if (addr == 0x4016 || addr == 0x4017)
                 {
                     return console.Controller.ReadState();
+                }
+                else if (addr >= 0x4000 && addr <= 0x4015)
+                {
+                    // TODO: APU
+                    return 0;
                 }
                 else if (addr >= 0x8000)
                 {
@@ -155,10 +200,21 @@ namespace NesEmu
                 {
                     console.Controller.WriteState(data);
                 }
+                else if (addr >= 0x4000 && addr <= 0x4017)
+                {
+                    // TODO: APU
+                }
                 else
                 {
                     Debug.Assert(false, "TODO: 0x" + addr.ToString("x4"));
                 }
+            }
+
+            public ushort Read16(ushort address)
+            {
+                byte lo = Read(address);
+                byte hi = Read((ushort)(address + 1));
+                return (ushort)((hi << 8) | lo);
             }
         }
 
@@ -198,7 +254,7 @@ namespace NesEmu
             var inst = instructions[opCode];
             int cycles = inst.cycles;
 
-            Debug.WriteLine(inst.mnemonic + ", PC:0x" + PC.ToString("x4"));
+//            Debug.WriteLine(inst.mnemonic + ", " + inst.addrMode + ", PC:0x" + PC.ToString("x4"));
 
             ushort addr = 0;
             switch (inst.addrMode)
@@ -222,8 +278,20 @@ namespace NesEmu
                     break;
                 case Implied:
                     break;
+                case Indirect:
+                    addr = (ushort)memory.Read16((ushort)(PC + 1));
+                    break;
+                case IndirectX:
+                    addr = (ushort)((memory.Read((ushort)(PC + 1)) + X) & 0xFF);
+                    break;
+                case IndirectY:
+                    addr = (ushort)(memory.Read((ushort)(PC + 1)) + Y);
+                    break;
                 case Relative:
                     addr = (ushort)(PC + (sbyte)memory.Read((ushort)(PC + 1)));
+                    break;
+                case ZeroPage:
+                    addr = memory.Read((ushort)(PC + 1));
                     break;
                 default:
                     Debug.WriteLine("address mode is not implemented yet: " + inst.addrMode);
@@ -236,6 +304,8 @@ namespace NesEmu
                 case LDX:   Load(ref X, addr);      break;
                 case LDY:   Load(ref Y, addr);      break;
                 case STA:   Store(ref A, addr);     break;
+                case STX:   Store(ref X, addr);     break;
+                case STY:   Store(ref Y, addr);     break;
                 case TAX:   Transfer(A, ref X);     break;
                 case TAY:   Transfer(A, ref Y);     break;
                 case TSX:   Transfer(S, ref X);     break;
@@ -256,7 +326,17 @@ namespace NesEmu
                     A &= memory.Read(addr);
                     UpdateNZ(A);
                     break;
+                case BIT:
+                    {
+                        byte data = memory.Read(addr);
+                        N = (data & (1 << 7)) != 0;
+                        V = (data & (1 << 6)) != 0;
+                        Z = (data & A) == 0;
+                    }
+                    break;
+                case CMP:   Compare(ref A, addr);   break;
                 case CPX:   Compare(ref X, addr);   break;
+                case CPY:   Compare(ref Y, addr);   break;
                 case DEC:
                     {
                         byte data = memory.Read(addr);
@@ -275,6 +355,10 @@ namespace NesEmu
                     break;
                 case INX:   Increment(ref X);       break;
                 case INY:   Increment(ref Y);       break;
+                case ORA:
+                    A |= memory.Read(addr);
+                    UpdateNZ(A);
+                    break;
                 case JMP:
                     PC = (ushort)(addr - inst.addrMode.Length());
                     break;
@@ -289,17 +373,16 @@ namespace NesEmu
                     P = PullStack();
                     PC = (ushort)(PullStack16() - inst.addrMode.Length());
                     break;
-                case BNE:
-                    if (!Z)
-                    {
-                        PC = addr;
-                    }
-                    break;
-                case BPL:
-                    if (!N)
-                    {
-                        PC = addr;
-                    }
+                case BCC:   Branch(!C, addr);       break;
+                case BCS:   Branch( C, addr);       break;
+                case BEQ:   Branch( Z, addr);       break;
+                case BMI:   Branch( N, addr);       break;
+                case BNE:   Branch(!Z, addr);       break;
+                case BPL:   Branch(!N, addr);       break;
+                case BVC:   Branch(!V, addr);       break;
+                case BVS:   Branch( V, addr);       break;
+                case CLD:
+                    // disable decimal mode , nothing happens on nes
                     break;
                 case SEI:
                     // TODO:
@@ -336,6 +419,14 @@ namespace NesEmu
             int diff = reg - memory.Read(addr);
             C = (diff >= 0);
             UpdateNZ((byte)diff);
+        }
+
+        void Branch(bool state, ushort addr)
+        {
+            if (state)
+            {
+                PC = addr;
+            }
         }
 
         void Increment(ref byte reg)
