@@ -24,7 +24,11 @@ namespace NesEmu
 
         public void Step()
         {
-            CPU.Step();
+            int cpuCycles = CPU.Step();
+            for (int i = 0; i < cpuCycles * 3; i++)
+            {
+                PPU.Step();
+            }
         }
     }
 }

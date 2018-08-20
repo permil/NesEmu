@@ -46,6 +46,8 @@ namespace NesEmu
             }
         }
 
+        public bool NMIInterrupt;
+
         public enum AddressMode
         {
             Absolute, AbsoluteX, AbsoluteY,
@@ -72,6 +74,7 @@ namespace NesEmu
             { 0x10, (BPL, Relative, 3) },
             { 0x20, (JSR, Absolute, 6) },
             { 0x29, (AND, Immediate, 2) },
+            { 0x40, (RTI, Implied, 6) },
             { 0x4C, (JMP, Absolute, 3) },
             { 0x60, (RTS, Implied, 6) },
             { 0x69, (ADC, Immediate, 2) },
@@ -167,10 +170,25 @@ namespace NesEmu
             PC = 0x8000;//memory.Read(0xFFFC);
             Cycles = 0;
             S = 0xFF;
+
+            NMIInterrupt = false;
         }
 
         public int Step()
         {
+            if (NMIInterrupt)
+            {
+                PushStack16(PC);
+                PushStack(P);
+
+                byte lo = memory.Read(0xFFFA);
+                byte hi = memory.Read(0XFFFB);
+                PC = (ushort)((hi << 8) | lo);
+
+                I = true;
+            }
+            NMIInterrupt = false;
+
             byte opCode = memory.Read(PC);
             if (!instructions.ContainsKey(opCode))
             {
@@ -266,6 +284,10 @@ namespace NesEmu
                     break;
                 case RTS:
                     PC = (ushort)(PullStack16() + 1 - inst.addrMode.Length());
+                    break;
+                case RTI:
+                    P = PullStack();
+                    PC = (ushort)(PullStack16() - inst.addrMode.Length());
                     break;
                 case BNE:
                     if (!Z)
