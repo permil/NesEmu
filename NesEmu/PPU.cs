@@ -151,20 +151,14 @@ namespace NesEmu
             }
         }
 
-        byte LookupBGColor(byte data)
+        byte LookupBGColor(byte paletteNum, byte colorNum)
         {
-            int colorNum = data & 0x3;
-            int paletteNum = (data >> 2) & 0x3;
-
-            return memory.Read((ushort)(colorNum == 0 ? 0x3F00 : (0x3F01 + 4 * paletteNum + colorNum - 1)));
+            return memory.Read((ushort)(colorNum == 0 ? 0x3F00 : (0x3F00 | (paletteNum << 2) | colorNum)));
         }
 
-        byte LookupSpriteColor(byte data)
+        byte LookupSpriteColor(byte paletteNum, byte colorNum)
         {
-            int colorNum = data & 0x3;
-            int paletteNum = (data >> 2) & 0x3;
-
-            return memory.Read((ushort)(colorNum == 0 ? 0x3F00 : (0x3F11 + 4 * paletteNum + colorNum - 1)));
+            return memory.Read((ushort)(colorNum == 0 ? 0x3F00 : (0x3F10 | (paletteNum << 2) | colorNum)));
         }
 
         [Obsolete("Dummy Implementation")]
@@ -173,14 +167,15 @@ namespace NesEmu
             byte[] pixels = new byte[256 * 240];
 
             // BG
-            for (int y = 0; y < 240; y += 8)
+            for (int y = 0; y < 240 / 8; y++)
             {
-                for (int x = 0; x < 256; x += 8)
+                for (int x = 0; x < 256 / 8; x++)
                 {
-                    byte tile  = memory.Read((ushort)(0x2000 + (256 / 8) * (y / 8) + (x / 8))); // FIXME: refer correct name table
-                    byte attrs = memory.Read((ushort)(0x23C0 + (256 / 8) * (y / 8) + (x / 8))); // FIXME: refer correct attr table
+                    byte tile  = memory.Read((ushort)(0x2000 + (256 / 8) * y + x)); // FIXME: refer correct name table
+                    byte attrs = memory.Read((ushort)(0x23C0 + 8 * (y / 4) + (x / 4))); // FIXME: refer correct attr table
 
-                    PutTile(pixels, (byte)x, (byte)y, tile, attrs, true);
+                    byte paletteNum = (byte)((attrs >> (((((y / 2) & 0x1) << 1) | ((x / 2) & 0x1)) * 2)) & 0b11);
+                    PutTile(pixels, (byte)(x * 8), (byte)(y * 8), tile, paletteNum, false, false, true);
                 }
             }
 
@@ -192,17 +187,18 @@ namespace NesEmu
                 byte attrs = OAM[i + 2];
                 byte x     = OAM[i + 3];
 
-                PutTile(pixels, x, y, tile, attrs, false);
+                byte paletteNum = 0;
+                bool flipX = ((attrs & 0x40) != 0);
+                bool flipY = ((attrs & 0x80) != 0);
+
+                PutTile(pixels, x, y, tile, paletteNum, flipX, flipY, false);
             }
 
             return pixels;
         }
         [Obsolete("Dummy Implementation")]
-        public void PutTile(byte[] pixels, byte x, byte y, byte tile, byte attrs, bool bg)
+        public void PutTile(byte[] pixels, byte x, byte y, byte tile, byte paletteNum, bool flipX, bool flipY, bool bg)
         {
-            bool flipX = ((attrs & 0x40) != 0);
-            bool flipY = ((attrs & 0x80) != 0);
-
             for (int j = 0; j < 8; j++)
             {
                 int yOffset = flipY ? 7 - j : j;
@@ -222,7 +218,7 @@ namespace NesEmu
                     int pixelIndex = 256 * (y + j) + (x + k);
                     if (pixelIndex >= 0 && pixelIndex < pixels.Length)
                     {
-                        pixels[pixelIndex] = (bg ? LookupBGColor(colorNum) : LookupSpriteColor(colorNum));
+                        pixels[pixelIndex] = (bg ? LookupBGColor(paletteNum, colorNum) : LookupSpriteColor(paletteNum, colorNum));
                     }
                 }
             }
