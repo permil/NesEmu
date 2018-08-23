@@ -22,6 +22,8 @@ namespace NesEmu
         readonly byte[] OAM = new byte[0x100];
         byte OAMAddr;
 
+        bool nmiOccurred;
+
         int scanline, cycle;
 
         // https://wiki.nesdev.com/w/index.php/PPU_registers#PPUCTRL
@@ -41,7 +43,14 @@ namespace NesEmu
         // |          (0: read backdrop from EXT pins; 1: output color on EXT pins)
         // +--------- Generate an NMI at the start of the
         //            vertical blanking interval(0: off; 1: on)
-        bool nmiEnabled;
+        byte PPUCTRL { get; set; }
+        ushort BaseNameTableAddress { get { return (ushort)(0x2000 + (PPUCTRL & 0b11) * 0x0400); } }
+        byte VRAMIncrement { get { return (byte)(((PPUCTRL >> 2) & 1) == 0 ? 1 : 32); } }
+        ushort SpritePatternTableAddress { get { return (ushort)(((PPUCTRL >> 3) & 1) == 0 ? 0x0000 : 0x1000); } }
+        ushort BGPatternTableAddress { get { return (ushort)(((PPUCTRL >> 4) & 1) == 0 ? 0x0000 : 0x1000); } }
+        // TODO: Sprite size
+        // TODO: PPU master / slave
+        bool NMIEnabled { get { return ((PPUCTRL >> 7) & 1) == 1; } }
 
         class Memory
         {
@@ -70,7 +79,7 @@ namespace NesEmu
                 }
                 else
                 {
-                    Debug.Assert(false, "Invalid PPU Memory Read: " + addr.ToString("x4"));
+                    Debug.Assert(false, "Invalid PPU Memory Read: 0x" + addr.ToString("x4"));
                     return 0;
                 }
             }
@@ -87,12 +96,23 @@ namespace NesEmu
                 }
                 else if (addr < 0x4000)
                 {
-                    paletteRAM[(addr - 0x3F00) % paletteRAM.Length] = data;
+                    paletteRAM[GetPaletteRamIndex(addr)] = data;
                 }
                 else // Invalid Write
                 {
-                    Debug.Assert(false, "Invalid PPU Memory Write: " + addr.ToString("x4"));
+                    Debug.Assert(false, "Invalid PPU Memory Write: 0x" + addr.ToString("x4"));
                 }
+            }
+
+            byte GetPaletteRamIndex(ushort addr)
+            {
+                byte index = (byte)((addr - 0x3F00) % paletteRAM.Length);
+                if (index >= 0x10 && index % 4 == 0)
+                {
+                    // https://wiki.nesdev.com/w/index.php/PPU_palettes#Memory_Map
+                    index -= 0x10;
+                }
+                return index;
             }
         }
 
@@ -103,13 +123,17 @@ namespace NesEmu
 
             scanline = -1;
             cycle = 0;
+
+            // $2000
+            PPUCTRL = 0b00000000;
         }
 
         public void Step()
         {
             if (scanline == 241 && cycle == 1) // https://wiki.nesdev.com/w/index.php/PPU_rendering#Vertical_blanking_lines_.28241-260.29
             {
-                if (nmiEnabled)
+                nmiOccurred = true;
+                if (NMIEnabled)
                 {
                     console.CPU.NMIInterrupt = true;
                 }
@@ -127,20 +151,14 @@ namespace NesEmu
             }
         }
 
-        byte LookupBGColor(byte data)
+        byte LookupBGColor(byte paletteNum, byte colorNum)
         {
-            int colorNum = data & 0x3;
-            int paletteNum = (data >> 2) & 0x3;
-
-            return memory.Read((ushort)(colorNum == 0 ? 0x3F00 : 0x3F01 + 4 * paletteNum + colorNum - 1));
+            return memory.Read((ushort)(colorNum == 0 ? 0x3F00 : (0x3F00 | (paletteNum << 2) | colorNum)));
         }
 
-        byte LookupSpriteColor(byte data)
+        byte LookupSpriteColor(byte paletteNum, byte colorNum)
         {
-            int colorNum = data & 0x3;
-            int paletteNum = (data >> 2) & 0x3;
-
-            return memory.Read((ushort)(colorNum == 0 ? 0x3F00 : 0x3F11 + 4 * paletteNum + colorNum - 1));
+            return memory.Read((ushort)(colorNum == 0 ? 0x3F00 : (0x3F10 | (paletteNum << 2) | colorNum)));
         }
 
         [Obsolete("Dummy Implementation")]
@@ -149,14 +167,15 @@ namespace NesEmu
             byte[] pixels = new byte[256 * 240];
 
             // BG
-            for (int y = 0; y < 240; y += 8)
+            for (int y = 0; y < 240 / 8; y++)
             {
-                for (int x = 0; x < 256; x += 8)
+                for (int x = 0; x < 256 / 8; x++)
                 {
-                    byte tile  = memory.Read((ushort)(0x2000 + (256 / 8) * (y / 8) + (x / 8))); // FIXME: refer correct name table
-                    byte attrs = memory.Read((ushort)(0x23C0 + (256 / 8) * (y / 8) + (x / 8))); // FIXME: refer correct attr table
+                    byte tile  = memory.Read((ushort)(0x2000 + (256 / 8) * y + x)); // FIXME: refer correct name table
+                    byte attrs = memory.Read((ushort)(0x23C0 + 8 * (y / 4) + (x / 4))); // FIXME: refer correct attr table
 
-                    PutTile(pixels, (byte)x, (byte)y, tile, attrs, true);
+                    byte paletteNum = (byte)((attrs >> (((((y / 2) & 0x1) << 1) | ((x / 2) & 0x1)) * 2)) & 0b11);
+                    PutTile(pixels, (byte)(x * 8), (byte)(y * 8), tile, paletteNum, false, false, true);
                 }
             }
 
@@ -168,18 +187,22 @@ namespace NesEmu
                 byte attrs = OAM[i + 2];
                 byte x     = OAM[i + 3];
 
-                PutTile(pixels, x, y, tile, attrs, false);
+                byte paletteNum = 0;
+                bool flipX = ((attrs & 0x40) != 0);
+                bool flipY = ((attrs & 0x80) != 0);
+
+                PutTile(pixels, x, y, tile, paletteNum, flipX, flipY, false);
             }
 
             return pixels;
         }
         [Obsolete("Dummy Implementation")]
-        public void PutTile(byte[] pixels, byte x, byte y, byte tile, byte attrs, bool bg)
+        public void PutTile(byte[] pixels, byte x, byte y, byte tile, byte paletteNum, bool flipX, bool flipY, bool bg)
         {
             for (int j = 0; j < 8; j++)
             {
-                int yOffset = ((attrs & 0x80) == 0) ? j : 7 - j;
-                ushort yAddr = (ushort)((bg ? 0x0000 : 0x1000) + tile * 16 + yOffset);
+                int yOffset = flipY ? 7 - j : j;
+                ushort yAddr = (ushort)((bg ? BGPatternTableAddress : SpritePatternTableAddress) + tile * 16 + yOffset);
 
                 // https://wiki.nesdev.com/w/index.php/PPU_pattern_tables
                 byte[] pattern = new byte[2];
@@ -187,24 +210,41 @@ namespace NesEmu
                 pattern[1] = memory.Read((ushort)(yAddr + 8));
                 for (int k = 0; k < 8; k++)
                 {
-                    int xOffset = ((attrs & 0x40) == 0) ? k : 7 - k;
+                    int xOffset = (flipX ? 7 - k : k);
                     byte loBit = (byte)((pattern[0] >> (7 - xOffset)) & 1);
                     byte hiBit = (byte)((pattern[1] >> (7 - xOffset)) & 1);
-                    byte colorNum = (byte)(((hiBit << 1) | loBit) & 0x03);
-                    pixels[256 * (y + j) + (x + k)] = (bg ? LookupBGColor(colorNum) : LookupSpriteColor(colorNum));
+                    byte colorNum = (byte)((hiBit << 1) | loBit);
+
+                    int pixelIndex = 256 * (y + j) + (x + k);
+                    if (pixelIndex >= 0 && pixelIndex < pixels.Length)
+                    {
+                        pixels[pixelIndex] = (bg ? LookupBGColor(paletteNum, colorNum) : LookupSpriteColor(paletteNum, colorNum));
+                    }
                 }
             }
         }
 
         public byte Read(ushort addr)
         {
-            Debug.WriteLine("PPU Read - 0x" + addr.ToString("x4"));
             // TODO:
             switch (addr)
             {
                 case 0x2002:
-                    return 0xFF; // FIXME:
+                    {
+                        byte data = 0;
+                        data |= (byte)((nmiOccurred ? 1 : 0) << 7);
+                        nmiOccurred = false;
+                        // TODO: other statuses
+                        return data;
+                    }
+                case 0x2007:
+                    {
+                        byte data = memory.Read(v);
+                        v += VRAMIncrement;
+                        return data;
+                    }
                 default:
+                    Debug.WriteLine("PPU Read - 0x" + addr.ToString("x4"));
                     return 0; // TODO:
             }
         }
@@ -214,15 +254,8 @@ namespace NesEmu
             Debug.WriteLine("PPU Write - 0x" + addr.ToString("x4") + " <- " + data);
             switch (addr)
             {
-                case 0x2000:
-                    {
-                        // TODO: other flags
-                        nmiEnabled = ((data >> 7) & 1) == 1;
-                    }
-                    break;
-                case 0x2003:
-                    OAMAddr = data;
-                    break;
+                case 0x2000:    PPUCTRL = data;     break;
+                case 0x2003:    OAMAddr = data;     break;
                 case 0x2004:
                     OAM[OAMAddr] = data;
                     OAMAddr++;
@@ -234,7 +267,7 @@ namespace NesEmu
                     break;
                 case 0x2007:
                     memory.Write(v, data);
-                    v += 1; // FIXME:
+                    v += VRAMIncrement;
                     break;
                 default:
                     // TODO:
