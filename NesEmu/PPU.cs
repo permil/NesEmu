@@ -72,6 +72,29 @@ namespace NesEmu
         // TODO: PPU master / slave
         bool NMIEnabled;
 
+        // $2001
+        // 7  bit  0
+        // ---- ----
+        // BGRs bMmG
+        // |||| ||||
+        // |||| |||+- Greyscale(0: normal color, 1: produce a greyscale display)
+        // |||| ||+-- 1: Show background in leftmost 8 pixels of screen, 0: Hide
+        // |||| |+--- 1: Show sprites in leftmost 8 pixels of screen, 0: Hide
+        // |||| +---- 1: Show background
+        // |||+------ 1: Show sprites
+        // ||+------- Emphasize red*
+        // |+-------- Emphasize green*
+        // +--------- Emphasize blue*
+        byte PPUMASK
+        {
+            set
+            {
+                showBG = (((value >> 3) & 0b1) == 1);
+                showSprites = (((value >> 4) & 0b1) == 1);
+            }
+        }
+        bool showBG, showSprites;
+
         // $2005
         byte PPUSCROLL
         {
@@ -210,18 +233,18 @@ namespace NesEmu
                 }
             }
 
-            bool renderingEnabled = true; // TODO: verify either of BG or Sprite rendering is enabled
+            bool renderingEnabled = showSprites || showBG;
             if (renderingEnabled)
             {
                 if (cycle == 257)
                 {
-//                    v.CoarseXScroll = t.CoarseXScroll;
+                    v.CoarseXScroll = t.CoarseXScroll;
                     // TODO: copy nametable select
                 }
                 if (cycle >= 280 && cycle <= 304 && scanline == 261)
                 {
- //                   v.CoarseYScroll = t.CoarseYScroll;
- //                   v.FineYScroll = t.FineYScroll;
+                    v.CoarseYScroll = t.CoarseYScroll;
+                    v.FineYScroll = t.FineYScroll;
                     // TODO: copy nametable select
                 }
             }
@@ -245,36 +268,42 @@ namespace NesEmu
             byte[] pixels = new byte[(WIDTH * 8) * (HEIGHT * 8)];
 
             // BG
-            int coarseX = t.CoarseXScroll; // FIXME: should refer v register
-            int coarseY = t.CoarseYScroll; // FIXME: should refer v register
-            for (int y = 0; y < HEIGHT; y++)
+            if (showBG)
             {
-                for (int x = 0; x < WIDTH; x++)
+                int coarseX = v.CoarseXScroll;
+                int coarseY = v.CoarseYScroll;
+                for (int y = 0; y < HEIGHT; y++)
                 {
-                    byte tile  = memory.Read((ushort)(0x2000 + WIDTH * y + x)); // FIXME: refer correct name table
-                    byte attrs = memory.Read((ushort)(0x23C0 + (WIDTH / 4) * (y / 4) + (x / 4))); // FIXME: refer correct attr table
+                    for (int x = 0; x < WIDTH; x++)
+                    {
+                        byte tile = memory.Read((ushort)(0x2000 + WIDTH * y + x)); // FIXME: refer correct name table
+                        byte attrs = memory.Read((ushort)(0x23C0 + (WIDTH / 4) * (y / 4) + (x / 4))); // FIXME: refer correct attr table
 
-                    byte paletteNum = (byte)((attrs >> (((((y / 2) & 0x1) << 1) | ((x / 2) & 0x1)) * 2)) & 0b11);
+                        byte paletteNum = (byte)((attrs >> (((((y / 2) & 0x1) << 1) | ((x / 2) & 0x1)) * 2)) & 0b11);
 
-                    int xPos = (x - coarseX) % WIDTH;  // FIXME: should take account of fineX
-                    int yPos = (y - coarseY) % HEIGHT; // FIXME: should take account of fineY
-                    PutTile(pixels, (byte)(xPos * 8), (byte)(yPos * 8), tile, paletteNum, false, false, true);
+                        int xPos = (x - coarseX) % WIDTH;  // FIXME: should take account of fineX
+                        int yPos = (y - coarseY) % HEIGHT; // FIXME: should take account of fineY
+                        PutTile(pixels, (byte)(xPos * 8), (byte)(yPos * 8), tile, paletteNum, false, false, true);
+                    }
                 }
             }
 
             // Sprite
-            for (int i = 0; i < OAM.Length / 4; i += 4)
+            if (showSprites)
             {
-                byte y     = OAM[i];
-                byte tile  = OAM[i + 1];
-                byte attrs = OAM[i + 2];
-                byte x     = OAM[i + 3];
+                for (int i = 0; i < OAM.Length / 4; i += 4)
+                {
+                    byte y = OAM[i];
+                    byte tile = OAM[i + 1];
+                    byte attrs = OAM[i + 2];
+                    byte x = OAM[i + 3];
 
-                byte paletteNum = 0;
-                bool flipX = ((attrs & 0x40) != 0);
-                bool flipY = ((attrs & 0x80) != 0);
+                    byte paletteNum = 0;
+                    bool flipX = ((attrs & 0x40) != 0);
+                    bool flipY = ((attrs & 0x80) != 0);
 
-                PutTile(pixels, x, y, tile, paletteNum, flipX, flipY, false);
+                    PutTile(pixels, x, y, tile, paletteNum, flipX, flipY, false);
+                }
             }
 
             return pixels;
@@ -341,6 +370,7 @@ namespace NesEmu
             switch (addr)
             {
                 case 0x2000:    PPUCTRL = data;     break;
+                case 0x2001:    PPUMASK = data;     break;
                 case 0x2003:    OAMAddr = data;     break;
                 case 0x2004:
                     OAM[OAMAddr] = data;
