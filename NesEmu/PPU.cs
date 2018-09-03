@@ -18,11 +18,11 @@ namespace NesEmu
             public ushort Value { get; set; }
 
             // for $2005
-            public byte NameTableSelect { private get { return (byte)((Value >> 10) & 0b11); } set { Value = (ushort)((Value & 0b1111001111111111) | (value << 10)); } }
+            public byte NameTableSelect { private get { return (byte)((Value >> 10) & 0b11); } set { Value = (ushort)((Value & ~(0b11 << 10)) | (value << 10)); } }
             public ushort BaseNameTableAddress { get { return (ushort)(0x2000 + NameTableSelect * 0x0400); } }
             public ushort CoarseXScroll { get { return (ushort)(Value & 0b11111); } set { Value = (ushort)((Value >> 5 << 5) | value); } }
-            public ushort CoarseYScroll { get { return (ushort)((Value >> 5) & 0b11111); } set { Value = (ushort)((Value & ~(0b11111 << 5)) | value); } }
-            public byte FineYScroll { get { return (byte)((Value >> 12) & 0b111); } set { Value = (ushort)((Value & ~(0b111 << 12)) | value); } }
+            public ushort CoarseYScroll { get { return (ushort)((Value >> 5) & 0b11111); } set { Value = (ushort)((Value & ~(0b11111 << 5)) | ((value & 0b11111) << 5)); } }
+            public byte FineYScroll { get { return (byte)((Value >> 12) & 0b111); } set { Value = (ushort)((Value & ~(0b111 << 12)) | ((value & 0b111) << 12)); } }
         }
         // PPU registers: https://wiki.nesdev.com/w/index.php/PPU_scrolling
         VRAMAddressRegister v = new VRAMAddressRegister();
@@ -238,9 +238,13 @@ namespace NesEmu
             bool renderingEnabled = showSprites || showBG;
             if (renderingEnabled)
             {
-                if (cycle > 0 && cycle <= 256 && scanline >= 0 && scanline <= 240)
+                if (cycle == 257)
                 {
-                    // TODO: render pixel
+                    // TODO: eval sprites
+                }
+                if (cycle > 0 && cycle <= 256 && scanline >= 0 && scanline < 240)
+                {
+                    RenderPixel();
                 }
 
                 if ((scanline >= 0 && scanline < 240) || scanline == 261) // prerender or render scanline
@@ -250,10 +254,10 @@ namespace NesEmu
                         tileShiftReg >>= 4;
                         switch (cycle % 8)
                         {
-                            case 1: nameTableByte = memory.Read((ushort)(0x2000 | (v.Value & 0x0FFF))); break;
-                            case 3: attributeTableByte = memory.Read((ushort)(0x23C0 | (v.Value & 0x0C00) | ((v.Value >> 4) & 0x38) | ((v.Value >> 2) & 0x07))); break;
-                            case 5: tileBitfieldLo = memory.Read((ushort)(BGPatternTableAddress + (nameTableByte * 16) + v.FineYScroll)); break;
-                            case 7: tileBitfieldHi = memory.Read((ushort)(BGPatternTableAddress + (nameTableByte * 16) + v.FineYScroll + 8)); break;
+                            case 1: nameTableByte      = memory.Read((ushort)(0x2000 | (v.Value & 0x0FFF)));    break;
+                            case 3: attributeTableByte = memory.Read((ushort)(0x23C0 | (v.Value & 0x0C00) | ((v.CoarseYScroll >> 2) << 3) | (v.CoarseXScroll >> 2)));   break;
+                            case 5: tileBitfieldLo     = memory.Read((ushort)(BGPatternTableAddress + (nameTableByte * 16) + v.FineYScroll));       break;
+                            case 7: tileBitfieldHi     = memory.Read((ushort)(BGPatternTableAddress + (nameTableByte * 16) + v.FineYScroll + 8));   break;
                             case 0:
                                 {
                                     byte palette = (byte)((attributeTableByte >> ((v.CoarseXScroll & 0x2) | ((v.CoarseYScroll & 0x2) << 1))) & 0x3);
@@ -341,33 +345,25 @@ namespace NesEmu
 
         const int HEIGHT = 30;
         const int WIDTH = 32;
+        byte[] pixels = new byte[(WIDTH * 8) * (HEIGHT * 8)];
         [Obsolete("Dummy Implementation")]
         public byte[] GetPixels()
         {
-            byte[] pixels = new byte[(WIDTH * 8) * (HEIGHT * 8)];
+            return pixels;
+        }
 
+        void RenderPixel()
+        {
             // BG
             if (showBG)
             {
-                int coarseX = 0;// v.CoarseXScroll;
-                int coarseY = 0;// v.CoarseYScroll;
-                for (int y = 0; y < HEIGHT; y++)
-                {
-                    for (int x = 0; x < WIDTH; x++)
-                    {
-                        byte tile = memory.Read((ushort)(0x2000 + WIDTH * y + x)); // FIXME: refer correct name table
-                        byte attrs = memory.Read((ushort)(0x23C0 + (WIDTH / 4) * (y / 4) + (x / 4))); // FIXME: refer correct attr table
-
-                        byte paletteNum = (byte)((attrs >> (((((y / 2) & 0x1) << 1) | ((x / 2) & 0x1)) * 2)) & 0b11);
-
-                        int xPos = (x - coarseX) % WIDTH;  // FIXME: should take account of fineX
-                        int yPos = (y - coarseY) % HEIGHT; // FIXME: should take account of fineY
-                        PutTile(pixels, (byte)(xPos * 8), (byte)(yPos * 8), tile, paletteNum, false, false, true);
-                    }
-                }
+                byte bgPixelData = (byte)((tileShiftReg >> (FineXScroll * 4)) & 0b1111);
+                byte colorNum = (byte)(bgPixelData & 0b11);
+                byte paletteNum = (byte)((bgPixelData >> 2) & 0b11);
+                pixels[scanline * (WIDTH * 8) + (cycle - 1)] = LookupBGColor(paletteNum, colorNum);
             }
 
-            // Sprite
+            // FIXME: Sprite
             if (showSprites)
             {
                 for (int i = 0; i < OAM.Length / 4; i += 4)
@@ -381,19 +377,17 @@ namespace NesEmu
                     bool flipX = ((attrs & 0x40) != 0);
                     bool flipY = ((attrs & 0x80) != 0);
 
-                    PutTile(pixels, x, y, tile, paletteNum, flipX, flipY, false);
+                    PutTile(pixels, x, y, tile, paletteNum, flipX, flipY);
                 }
             }
-
-            return pixels;
         }
         [Obsolete("Dummy Implementation")]
-        public void PutTile(byte[] pixels, byte x, byte y, byte tile, byte paletteNum, bool flipX, bool flipY, bool bg)
+        public void PutTile(byte[] pixels, byte x, byte y, byte tile, byte paletteNum, bool flipX, bool flipY)
         {
             for (int j = 0; j < 8; j++)
             {
                 int yOffset = flipY ? 7 - j : j;
-                ushort yAddr = (ushort)((bg ? BGPatternTableAddress : spritePatternTableAddress) + tile * 16 + yOffset);
+                ushort yAddr = (ushort)(spritePatternTableAddress + tile * 16 + yOffset);
 
                 // https://wiki.nesdev.com/w/index.php/PPU_pattern_tables
                 byte[] pattern = new byte[2];
@@ -406,14 +400,15 @@ namespace NesEmu
                     byte hiBit = (byte)((pattern[1] >> (7 - xOffset)) & 1);
                     byte colorNum = (byte)((hiBit << 1) | loBit);
 
-                    if (bg || colorNum != 0)
+                    if (colorNum != 0)
                     {
                         int pixelIndex = (WIDTH * 8) * ((y + j) % (HEIGHT * 8)) + ((x + k) % (WIDTH * 8));
-                        pixels[pixelIndex] = (bg ? LookupBGColor(paletteNum, colorNum) : LookupSpriteColor(paletteNum, colorNum));
+                        pixels[pixelIndex] = LookupSpriteColor(paletteNum, colorNum);
                     }
                 }
             }
         }
+
 
         public byte Read(ushort addr)
         {
