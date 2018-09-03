@@ -211,6 +211,8 @@ namespace NesEmu
             PPUCTRL = 0b00000000;
         }
 
+        ulong tileShiftReg;
+        byte nameTableByte, attributeTableByte, tileBitfieldLo, tileBitfieldHi;
         public void Step()
         {
             if (scanline == 241 && cycle == 1) // https://wiki.nesdev.com/w/index.php/PPU_rendering#Vertical_blanking_lines_.28241-260.29
@@ -236,13 +238,90 @@ namespace NesEmu
             bool renderingEnabled = showSprites || showBG;
             if (renderingEnabled)
             {
-                if (cycle == 257)
+                if (cycle > 0 && cycle <= 256 && scanline >= 0 && scanline <= 240)
                 {
-                    v.CoarseXScroll = t.CoarseXScroll;
-                    // TODO: copy nametable select
+                    // TODO: render pixel
+                }
+
+                if ((scanline >= 0 && scanline < 240) || scanline == 261) // prerender or render scanline
+                {
+                    if (((cycle > 0 && cycle <= 256) || (cycle >= 321 && cycle <= 336)))
+                    {
+                        tileShiftReg >>= 4;
+                        switch (cycle % 8)
+                        {
+                            case 1: nameTableByte = memory.Read((ushort)(0x2000 | (v.Value & 0x0FFF))); break;
+                            case 3: attributeTableByte = memory.Read((ushort)(0x23C0 | (v.Value & 0x0C00) | ((v.Value >> 4) & 0x38) | ((v.Value >> 2) & 0x07))); break;
+                            case 5: tileBitfieldLo = memory.Read((ushort)(BGPatternTableAddress + (nameTableByte * 16) + v.FineYScroll)); break;
+                            case 7: tileBitfieldHi = memory.Read((ushort)(BGPatternTableAddress + (nameTableByte * 16) + v.FineYScroll + 8)); break;
+                            case 0:
+                                {
+                                    byte palette = (byte)((attributeTableByte >> ((v.CoarseXScroll & 0x2) | ((v.CoarseYScroll & 0x2) << 1))) & 0x3);
+
+                                    ulong data = 0; // Upper 32 bits to add to tileShiftReg
+                                    for (int i = 0; i < 8; i++)
+                                    {
+                                        // Get color number
+                                        byte loColorBit = (byte)((tileBitfieldLo >> (7 - i)) & 1);
+                                        byte hiColorBit = (byte)((tileBitfieldHi >> (7 - i)) & 1);
+                                        byte colorNum = (byte)((hiColorBit << 1) | (loColorBit) & 0x03);
+
+                                        // Add palette number
+                                        byte fullPixelData = (byte)(((palette << 2) | colorNum) & 0xF);
+
+                                        data |= (uint)(fullPixelData << (4 * i));
+                                    }
+
+                                    tileShiftReg &= 0xFFFFFFFF;
+                                    tileShiftReg |= (data << 32);
+
+                                    // Coarse X increment: https://wiki.nesdev.com/w/index.php/PPU_scrolling#Coarse_X_increment
+                                    v.CoarseXScroll = (ushort)((v.CoarseXScroll + 1) % 32);
+                                    if (v.CoarseXScroll == 0) { /* TODO: switch horizontal nametable */ }
+
+                                    if (cycle == 256) // Y increment: https://wiki.nesdev.com/w/index.php/PPU_scrolling#Y_increment
+                                    {
+                                        if (v.FineYScroll != 7)
+                                        {
+                                            v.FineYScroll++; // increment Fine Y
+                                        }
+                                        else
+                                        {
+                                            v.FineYScroll = 0; // reset Fine Y
+                                            switch (v.CoarseYScroll)
+                                            {
+                                                case 29:
+                                                    v.CoarseYScroll = 0;
+                                                    // TODO: switch vertical nametable
+                                                    break;
+                                                case 31:
+                                                    v.CoarseYScroll = 0;
+                                                    break;
+                                                default:
+                                                    v.CoarseYScroll = (ushort)((v.CoarseYScroll + 1) % 32); // increment Coarse Y
+                                                    break;
+                                            }
+                                        }
+                                    }
+                                }
+                                break;
+                        }
+                    }
+
+                    if (cycle > 257 && cycle <= 320)
+                    {
+                        OAMAddr = 0;
+                    }
+                    if (cycle == 257)
+                    {
+                        // copy horizontal position data from t to v
+                        v.CoarseXScroll = t.CoarseXScroll;
+                        // TODO: copy nametable select
+                    }
                 }
                 if (cycle >= 280 && cycle <= 304 && scanline == 261)
                 {
+                    // copy vertical position data from t to v
                     v.CoarseYScroll = t.CoarseYScroll;
                     v.FineYScroll = t.FineYScroll;
                     // TODO: copy nametable select
@@ -270,8 +349,8 @@ namespace NesEmu
             // BG
             if (showBG)
             {
-                int coarseX = v.CoarseXScroll;
-                int coarseY = v.CoarseYScroll;
+                int coarseX = 0;// v.CoarseXScroll;
+                int coarseY = 0;// v.CoarseYScroll;
                 for (int y = 0; y < HEIGHT; y++)
                 {
                     for (int x = 0; x < WIDTH; x++)
