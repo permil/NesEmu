@@ -18,9 +18,9 @@ namespace NesEmu
             public ushort Value { get; set; }
 
             // for $2005
-            public byte NameTableSelect { private get { return (byte)((Value >> 10) & 0b11); } set { Value = (ushort)((Value & ~(0b11 << 10)) | (value << 10)); } }
+            public byte NameTableSelect { private get { return (byte)((Value >> 10) & 0b11); } set { Value = (ushort)((Value & ~(0b11 << 10)) | ((value & 0b11) << 10)); } }
             public ushort BaseNameTableAddress { get { return (ushort)(0x2000 + NameTableSelect * 0x0400); } }
-            public ushort CoarseXScroll { get { return (ushort)(Value & 0b11111); } set { Value = (ushort)((Value >> 5 << 5) | value); } }
+            public ushort CoarseXScroll { get { return (ushort)(Value & 0b11111); } set { Value = (ushort)((Value & ~0b11111) | (value & 0b11111)); } }
             public ushort CoarseYScroll { get { return (ushort)((Value >> 5) & 0b11111); } set { Value = (ushort)((Value & ~(0b11111 << 5)) | ((value & 0b11111) << 5)); } }
             public byte FineYScroll { get { return (byte)((Value >> 12) & 0b111); } set { Value = (ushort)((Value & ~(0b111 << 12)) | ((value & 0b111) << 12)); } }
         }
@@ -285,13 +285,9 @@ namespace NesEmu
 
                                     if (cycle == 256) // Y increment: https://wiki.nesdev.com/w/index.php/PPU_scrolling#Y_increment
                                     {
-                                        if (v.FineYScroll != 7)
+                                        v.FineYScroll = (byte)((v.FineYScroll + 1) % 8);
+                                        if (v.FineYScroll == 0)
                                         {
-                                            v.FineYScroll++; // increment Fine Y
-                                        }
-                                        else
-                                        {
-                                            v.FineYScroll = 0; // reset Fine Y
                                             switch (v.CoarseYScroll)
                                             {
                                                 case 29:
@@ -354,13 +350,16 @@ namespace NesEmu
 
         void RenderPixel()
         {
+            int renderingX = cycle - 1;
+            int renderingY = scanline;
+
             // BG
             if (showBG)
             {
                 byte bgPixelData = (byte)((tileShiftReg >> (FineXScroll * 4)) & 0b1111);
                 byte colorNum = (byte)(bgPixelData & 0b11);
                 byte paletteNum = (byte)((bgPixelData >> 2) & 0b11);
-                pixels[scanline * (WIDTH * 8) + (cycle - 1)] = LookupBGColor(paletteNum, colorNum);
+                pixels[renderingY * (WIDTH * 8) + renderingX] = LookupBGColor(paletteNum, colorNum);
             }
 
             // FIXME: Sprite
@@ -368,44 +367,46 @@ namespace NesEmu
             {
                 for (int i = 0; i < OAM.Length / 4; i += 4)
                 {
-                    byte y = OAM[i];
+                    byte yPos = OAM[i];
                     byte tile = OAM[i + 1];
                     byte attrs = OAM[i + 2];
-                    byte x = OAM[i + 3];
+                    byte xPos = OAM[i + 3];
 
-                    byte paletteNum = 0;
-                    bool flipX = ((attrs & 0x40) != 0);
-                    bool flipY = ((attrs & 0x80) != 0);
+                    if (xPos <= renderingX && xPos + 8 > renderingX
+                     && yPos <= renderingY && yPos + 8 > renderingY)
+                    {
+                        byte paletteNum = 0;
+                        bool flipX = ((attrs & 0x40) != 0);
+                        bool flipY = ((attrs & 0x80) != 0);
 
-                    PutTile(pixels, x, y, tile, paletteNum, flipX, flipY);
+                        PutTile(pixels, xPos, yPos, renderingX, renderingY, tile, paletteNum, flipX, flipY);
+                    }
                 }
             }
         }
         [Obsolete("Dummy Implementation")]
-        public void PutTile(byte[] pixels, byte x, byte y, byte tile, byte paletteNum, bool flipX, bool flipY)
+        public void PutTile(byte[] pixels, byte xPos, byte yPos, int renderingX, int renderingY, byte tile, byte paletteNum, bool flipX, bool flipY)
         {
-            for (int j = 0; j < 8; j++)
+            int j = renderingY - yPos;
+            int k = renderingX - xPos;
+
+            int yOffset = flipY ? 7 - j : j;
+            ushort yAddr = (ushort)(spritePatternTableAddress + tile * 16 + yOffset);
+
+            // https://wiki.nesdev.com/w/index.php/PPU_pattern_tables
+            byte[] pattern = new byte[2];
+            pattern[0] = memory.Read(yAddr);
+            pattern[1] = memory.Read((ushort)(yAddr + 8));
+
+            int xOffset = (flipX ? 7 - k : k);
+            byte loBit = (byte)((pattern[0] >> (7 - xOffset)) & 1);
+            byte hiBit = (byte)((pattern[1] >> (7 - xOffset)) & 1);
+            byte colorNum = (byte)((hiBit << 1) | loBit);
+
+            if (colorNum != 0)
             {
-                int yOffset = flipY ? 7 - j : j;
-                ushort yAddr = (ushort)(spritePatternTableAddress + tile * 16 + yOffset);
-
-                // https://wiki.nesdev.com/w/index.php/PPU_pattern_tables
-                byte[] pattern = new byte[2];
-                pattern[0] = memory.Read(yAddr);
-                pattern[1] = memory.Read((ushort)(yAddr + 8));
-                for (int k = 0; k < 8; k++)
-                {
-                    int xOffset = (flipX ? 7 - k : k);
-                    byte loBit = (byte)((pattern[0] >> (7 - xOffset)) & 1);
-                    byte hiBit = (byte)((pattern[1] >> (7 - xOffset)) & 1);
-                    byte colorNum = (byte)((hiBit << 1) | loBit);
-
-                    if (colorNum != 0)
-                    {
-                        int pixelIndex = (WIDTH * 8) * ((y + j) % (HEIGHT * 8)) + ((x + k) % (WIDTH * 8));
-                        pixels[pixelIndex] = LookupSpriteColor(paletteNum, colorNum);
-                    }
-                }
+                int pixelIndex = (WIDTH * 8) * ((yPos + j) % (HEIGHT * 8)) + ((xPos + k) % (WIDTH * 8));
+                pixels[pixelIndex] = LookupSpriteColor(paletteNum, colorNum);
             }
         }
 
