@@ -22,5 +22,17 @@ namespace NesEmu.Mappers
         {
             return cartridge.CHR[addr];
         }
+
+        public virtual ushort ConvertVRAMAddress(int addr)
+        {
+            if (cartridge.VerticalMirroring)
+            {
+                return (ushort)(addr < 0x2800 ? addr : addr - 0x0800);
+            }
+            else
+            {
+                return (ushort)((addr / 0x400) % 2 == 0 ? addr : addr - 0x400);
+            }
+        }
     }
 }
