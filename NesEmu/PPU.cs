@@ -443,6 +443,8 @@ namespace NesEmu
 
                         return data;
                     }
+                case 0x2004:
+                    return OAM[OAMAddr];
                 case 0x2007:
                     {
                         byte data = memory.Read(v.Value);
@@ -463,14 +465,13 @@ namespace NesEmu
                         return data;
                     }
                 default:
-                    Debug.WriteLine("PPU Read - 0x" + addr.ToString("x4"));
-                    return 0; // TODO:
+                    Debug.Assert(false, "Invalid PPU Read - 0x" + addr.ToString("x4"));
+                    return 0;
             }
         }
 
         public void Write(ushort addr, byte data)
         {
-//            Debug.WriteLine("PPU Write - 0x" + addr.ToString("x4") + " <- " + data);
             switch (addr)
             {
                 case 0x2000:    PPUCTRL = data;     break;
@@ -487,7 +488,7 @@ namespace NesEmu
                     v.Value += VRAMIncrement;
                     break;
                 default:
-                    // TODO:
+                    Debug.Assert(false, "Invalid PPU Write - 0x" + addr.ToString("x4") + " <- " + data);
                     break;
             }
         }
