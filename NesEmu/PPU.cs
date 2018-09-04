@@ -425,7 +425,7 @@ namespace NesEmu
             return colorNum;
         }
 
-
+        byte PPUDATABuffer;
         public byte Read(ushort addr)
         {
             // TODO:
@@ -446,6 +446,19 @@ namespace NesEmu
                 case 0x2007:
                     {
                         byte data = memory.Read(v.Value);
+
+                        // Buffered read emulation: https://wiki.nesdev.com/w/index.php/PPU_registers#The_PPUDATA_read_buffer_.28post-fetch.29
+                        if (v.Value < 0x3F00)
+                        {
+                            byte tmp = PPUDATABuffer;
+                            PPUDATABuffer = data;
+                            data = tmp;
+                        }
+                        else
+                        {
+                            PPUDATABuffer = memory.Read((ushort)(v.Value - 0x1000));
+                        }
+
                         v.Value += VRAMIncrement;
                         return data;
                     }
