@@ -35,6 +35,7 @@ namespace NesEmu
         byte OAMAddr;
 
         bool nmiOccurred;
+        bool spriteZeroHitOccurred;
 
         int scanline, cycle;
 
@@ -235,8 +236,13 @@ namespace NesEmu
                 }
             }
 
-            bool renderingEnabled = showSprites || showBG;
-            if (renderingEnabled)
+            if (scanline == 261 && cycle == 1)
+            {
+                nmiOccurred = false;
+                spriteZeroHitOccurred = false;
+            }
+
+            if (showSprites || showBG)
             {
                 if (cycle == 257)
                 {
@@ -375,17 +381,22 @@ namespace NesEmu
                     if (xPos <= renderingX && xPos + 8 > renderingX
                      && yPos <= renderingY && yPos + 8 > renderingY)
                     {
+
                         byte paletteNum = 0;
                         bool flipX = ((attrs & 0x40) != 0);
                         bool flipY = ((attrs & 0x80) != 0);
 
-                        PutTile(pixels, xPos, yPos, renderingX, renderingY, tile, paletteNum, flipX, flipY);
+                        byte colorNum = PutTile(pixels, xPos, yPos, renderingX, renderingY, tile, paletteNum, flipX, flipY);
+                        if (i == 0 && colorNum != 0)
+                        {
+                            spriteZeroHitOccurred = true;
+                        }
                     }
                 }
             }
         }
         [Obsolete("Dummy Implementation")]
-        public void PutTile(byte[] pixels, byte xPos, byte yPos, int renderingX, int renderingY, byte tile, byte paletteNum, bool flipX, bool flipY)
+        public byte PutTile(byte[] pixels, byte xPos, byte yPos, int renderingX, int renderingY, byte tile, byte paletteNum, bool flipX, bool flipY)
         {
             int j = renderingY - yPos;
             int k = renderingX - xPos;
@@ -408,6 +419,8 @@ namespace NesEmu
                 int pixelIndex = (WIDTH * 8) * ((yPos + j) % (HEIGHT * 8)) + ((xPos + k) % (WIDTH * 8));
                 pixels[pixelIndex] = LookupSpriteColor(paletteNum, colorNum);
             }
+
+            return colorNum;
         }
 
 
@@ -419,10 +432,11 @@ namespace NesEmu
                 case 0x2002:
                     {
                         byte data = 0;
+                        data |= (byte)((spriteZeroHitOccurred ? 1 : 0) << 6);
                         data |= (byte)((nmiOccurred ? 1 : 0) << 7);
-                        nmiOccurred = false;
                         // TODO: other statuses
 
+                        nmiOccurred = false;
                         w = false; // https://wiki.nesdev.com/w/index.php/PPU_scrolling#.242002_read
 
                         return data;
@@ -441,7 +455,7 @@ namespace NesEmu
 
         public void Write(ushort addr, byte data)
         {
-            Debug.WriteLine("PPU Write - 0x" + addr.ToString("x4") + " <- " + data);
+//            Debug.WriteLine("PPU Write - 0x" + addr.ToString("x4") + " <- " + data);
             switch (addr)
             {
                 case 0x2000:    PPUCTRL = data;     break;
