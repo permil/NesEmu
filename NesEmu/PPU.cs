@@ -18,6 +18,8 @@ namespace NesEmu
             public ushort Value { get; set; }
 
             // for $2005
+            public bool HorizontalNameTableFlag { get { return (((Value >> 10) & 0b1) == 1); } set { Value = (ushort)((Value & ~(0b1 << 10) | ((value ? 1 : 0) << 10))); } }
+            public bool VerticalNameTableFlag { get { return (((Value >> 11) & 0b1) == 1); } set { Value = (ushort)((Value & ~(0b1 << 11) | ((value ? 1 : 0) << 10))); } }
             public byte NameTableSelect { private get { return (byte)((Value >> 10) & 0b11); } set { Value = (ushort)((Value & ~(0b11 << 10)) | ((value & 0b11) << 10)); } }
             public ushort BaseNameTableAddress { get { return (ushort)(0x2000 + NameTableSelect * 0x0400); } }
             public ushort CoarseXScroll { get { return (ushort)(Value & 0b11111); } set { Value = (ushort)((Value & ~0b11111) | (value & 0b11111)); } }
@@ -130,7 +132,7 @@ namespace NesEmu
                 {
                     // t: .FEDCBA ........ = d: ..FEDCBA
                     // t: X...... ........ = 0
-                    t.Value = (ushort)((t.Value & 0x00FF) | (value << 8));
+                    t.Value = (ushort)((t.Value & 0x00FF) | ((value & 0b111111) << 8));
                 }
                 w = !w;
             }
@@ -139,7 +141,7 @@ namespace NesEmu
         class Memory
         {
             private readonly Mapper mapper;
-            private readonly byte[] VRAM = new byte[0x800];
+            private readonly byte[] VRAM = new byte[0x2000];
             private readonly byte[] paletteRAM = new byte[0x20];
 
             public Memory(Mapper mapper)
@@ -155,7 +157,7 @@ namespace NesEmu
                 }
                 else if (addr < 0x3F00)
                 {
-                    return VRAM[(addr - 0x2000) % VRAM.Length]; // FIXME:
+                    return VRAM[mapper.ConvertVRAMAddress(addr) - 0x2000];
                 }
                 else if (addr < 0x4000)
                 {
@@ -176,7 +178,7 @@ namespace NesEmu
                 }
                 else if (addr < 0x3F00)
                 {
-                    VRAM[(addr - 0x2000) % VRAM.Length] = data;
+                    VRAM[mapper.ConvertVRAMAddress(addr) - 0x2000] = data;
                 }
                 else if (addr < 0x4000)
                 {
@@ -287,7 +289,7 @@ namespace NesEmu
 
                                     // Coarse X increment: https://wiki.nesdev.com/w/index.php/PPU_scrolling#Coarse_X_increment
                                     v.CoarseXScroll = (ushort)((v.CoarseXScroll + 1) % 32);
-                                    if (v.CoarseXScroll == 0) { /* TODO: switch horizontal nametable */ }
+                                    if (v.CoarseXScroll == 0) { v.HorizontalNameTableFlag = !v.HorizontalNameTableFlag; }
 
                                     if (cycle == 256) // Y increment: https://wiki.nesdev.com/w/index.php/PPU_scrolling#Y_increment
                                     {
@@ -298,7 +300,7 @@ namespace NesEmu
                                             {
                                                 case 29:
                                                     v.CoarseYScroll = 0;
-                                                    // TODO: switch vertical nametable
+                                                    v.VerticalNameTableFlag = !v.VerticalNameTableFlag;
                                                     break;
                                                 case 31:
                                                     v.CoarseYScroll = 0;
@@ -322,7 +324,7 @@ namespace NesEmu
                     {
                         // copy horizontal position data from t to v
                         v.CoarseXScroll = t.CoarseXScroll;
-                        // TODO: copy nametable select
+                        v.HorizontalNameTableFlag = t.HorizontalNameTableFlag;
                     }
                 }
                 if (cycle >= 280 && cycle <= 304 && scanline == 261)
@@ -330,7 +332,7 @@ namespace NesEmu
                     // copy vertical position data from t to v
                     v.CoarseYScroll = t.CoarseYScroll;
                     v.FineYScroll = t.FineYScroll;
-                    // TODO: copy nametable select
+                    v.VerticalNameTableFlag = t.VerticalNameTableFlag;
                 }
             }
         }
