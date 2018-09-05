@@ -111,16 +111,17 @@ namespace NesEmu
             { 0x41, (EOR, IndirectX, 6) },
             { 0x45, (EOR, ZeroPage, 3) },
             { 0x46, (LSR, ZeroPage, 5) },
-            { 0x49, (EOR, Immediate, 2) },
-            { 0x4C, (JMP, Absolute, 3) },
             { 0x48, (PHA, Implied, 3) },
+            { 0x49, (EOR, Immediate, 2) },
             { 0x4A, (LSR, Accumulator, 2) },
+            { 0x4C, (JMP, Absolute, 3) },
             { 0x4D, (EOR, Absolute, 4) },
             { 0x4E, (LSR, Absolute, 6) },
             { 0x50, (BVC, Relative, 2) },
             { 0x51, (EOR, IndirectY, 5) },
             { 0x55, (EOR, ZeroPageX, 4) },
             { 0x56, (LSR, ZeroPageX, 6) },
+            { 0x58, (CLI, Implied, 2) },
             { 0x59, (EOR, AbsoluteY, 4) },
             { 0x5D, (EOR, AbsoluteX, 4) },
             { 0x5E, (LSR, AbsoluteX, 7) },
@@ -217,6 +218,7 @@ namespace NesEmu
             { 0xF1, (SBC, IndirectY, 5) },
             { 0xF5, (SBC, ZeroPageX, 4) },
             { 0xF6, (INC, ZeroPageX, 6) },
+            { 0xF8, (SED, Implied, 2) },
             { 0xF9, (SBC, AbsoluteY, 4) },
             { 0xFD, (SBC, AbsoluteX, 4) },
             { 0xFE, (INC, AbsoluteX, 7) },
@@ -297,6 +299,22 @@ namespace NesEmu
                 byte hi = Read((ushort)(address + 1));
                 return (ushort)((hi << 8) | lo);
             }
+
+            // due to 6502's indirect jmp bug, need to wrap page in case of the address ends 0xFF
+            // https://everything2.com/title/6502+indirect+JMP+bug
+            public ushort Read16WrapPage(ushort address)
+            {
+                if ((address & 0xFF) == 0xFF)
+                {
+                    byte lo = Read(address);
+                    byte hi = Read((ushort)(address & (~0xFF))); // Wrap around to start of page eg. 0x02FF becomes 0x0200
+                    return (ushort)((hi << 8) | lo);
+                }
+                else
+                {
+                    return Read16(address);
+                }
+            }
         }
 
         public CPU(Console console)
@@ -304,9 +322,10 @@ namespace NesEmu
             this.console = console;
             memory = new Memory(console);
 
-            PC = 0x8000;//memory.Read(0xFFFC);
+            PC = memory.Read16(0xFFFC);
             Cycles = 0;
             S = 0xFF;
+            P = 0b00100100;
 
             NMIInterrupt = false;
         }
@@ -325,13 +344,13 @@ namespace NesEmu
             byte opCode = memory.Read(PC);
             if (!instructions.ContainsKey(opCode))
             {
-                Debug.WriteLine("opcode is not implemented yet: 0x" + opCode.ToString("x2"));
+                Debug.WriteLine("opcode is not implemented yet: 0x" + opCode.ToString("x2") + ", PC: 0x" + Convert.ToString(PC, 16));
                 return 0;
             }
             var inst = instructions[opCode];
             int cycles = inst.cycles;
 
-            // Debug.WriteLine(inst.mnemonic + ", " + inst.addrMode + ", PC:0x" + PC.ToString("x4") + ", A:" + A + ", X:" + X + ", Y:" + Y + ", P:" + Convert.ToString(P, 2));
+//            Debug.WriteLine(inst.mnemonic + ", " + inst.addrMode + ", PC:0x" + PC.ToString("x4") + ", A:" + A + ", X:" + X + ", Y:" + Y + ", P:" + Convert.ToString(P, 2));
 
             ushort addr = 0;
             switch (inst.addrMode)
@@ -353,13 +372,13 @@ namespace NesEmu
                 case Implied:
                     break;
                 case Indirect:
-                    addr = memory.Read16((ushort)memory.Read16((ushort)(PC + 1)));
+                    addr = memory.Read16WrapPage((ushort)memory.Read16((ushort)(PC + 1)));
                     break;
                 case IndirectX:
-                    addr = memory.Read16((ushort)((memory.Read((ushort)(PC + 1)) + X) & 0xFF));
+                    addr = memory.Read16WrapPage((ushort)((memory.Read((ushort)(PC + 1)) + X) & 0xFF));
                     break;
                 case IndirectY:
-                    addr = (ushort)(memory.Read16((ushort)(memory.Read((ushort)(PC + 1)))) + Y);
+                    addr = (ushort)(memory.Read16WrapPage((ushort)(memory.Read((ushort)(PC + 1)))) + Y);
                     break;
                 case Relative:
                     addr = (ushort)(PC + (sbyte)memory.Read((ushort)(PC + 1)) + 2);
@@ -490,6 +509,7 @@ namespace NesEmu
                         {
                             memory.Write(addr, (byte)data);
                         }
+                        UpdateNZ((byte)data);
                     }
                     break;
                 case ROR:
@@ -504,6 +524,7 @@ namespace NesEmu
                         {
                             memory.Write(addr, (byte)(data >> 1));
                         }
+                        UpdateNZ((byte)(data >> 1));
                     }
                     break;
                 case SBC:
@@ -543,12 +564,12 @@ namespace NesEmu
                 case BVC:   Branch(!V, addr);       break;
                 case BVS:   Branch( V, addr);       break;
                 case CLC:   C = false;              break;
-                case CLD:                           break;  // disable decimal mode , nothing happens on nes
+                case CLD:                           break;  // disable decimal mode, nothing happens on nes
+                case CLI:   I = false;              break;
                 case CLV:   V = false;              break;
                 case SEC:   C = true;               break;
-                case SEI:
-                    // TODO:
-                    break;
+                case SED:                           break;  // enable decimal mode, nothing happens on nes
+                case SEI:   I = true;               break;
                 case BRK:
                     PushStack16(PC);
                     PushStack(P);
