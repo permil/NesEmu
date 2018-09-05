@@ -246,7 +246,7 @@ namespace NesEmu
                 }
                 else if (addr == 0x4016 || addr == 0x4017)
                 {
-                    return console.Controller.ReadState();
+                    return console.Controller[addr - 0x4016].ReadState();
                 }
                 else if (addr >= 0x4000 && addr <= 0x4015)
                 {
@@ -281,7 +281,8 @@ namespace NesEmu
                 }
                 else if (addr == 0x4016)
                 {
-                    console.Controller.WriteState(data);
+                    console.Controller[0].WriteState(data);
+                    console.Controller[1].WriteState(data);
                 }
                 else if (addr >= 0x4000 && addr <= 0x4017)
                 {
@@ -330,6 +331,12 @@ namespace NesEmu
             NMIInterrupt = false;
         }
 
+        bool debug;
+        public void ToggleDebugLog()
+        {
+            debug = !debug;
+        }
+
         public int Step()
         {
             if (NMIInterrupt)
@@ -350,7 +357,7 @@ namespace NesEmu
             var inst = instructions[opCode];
             int cycles = inst.cycles;
 
-//            Debug.WriteLine(inst.mnemonic + ", " + inst.addrMode + ", PC:0x" + PC.ToString("x4") + ", A:" + A + ", X:" + X + ", Y:" + Y + ", P:" + Convert.ToString(P, 2));
+            if (debug) Debug.WriteLine(inst.mnemonic + ", " + inst.addrMode + ", PC:0x" + PC.ToString("x4") + ", A:" + A + ", X:" + X + ", Y:" + Y + ", P:" + Convert.ToString(P, 2));
 
             ushort addr = 0;
             switch (inst.addrMode)

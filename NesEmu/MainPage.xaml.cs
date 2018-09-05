@@ -113,14 +113,23 @@ namespace NesEmu
         {
             switch (e.VirtualKey)
             {
-                case VirtualKey.Z:      console.Controller.SetState(Controller.Button.A, state);        break;
-                case VirtualKey.X:      console.Controller.SetState(Controller.Button.B, state);        break;
-                case VirtualKey.Q:      console.Controller.SetState(Controller.Button.Select, state);   break;
-                case VirtualKey.W:      console.Controller.SetState(Controller.Button.Start, state);    break;
-                case VirtualKey.Up:     console.Controller.SetState(Controller.Button.Up, state);       break;
-                case VirtualKey.Down:   console.Controller.SetState(Controller.Button.Down, state);     break;
-                case VirtualKey.Left:   console.Controller.SetState(Controller.Button.Left, state);     break;
-                case VirtualKey.Right:  console.Controller.SetState(Controller.Button.Right, state);    break;
+                case VirtualKey.X:      console.Controller[0].SetState(Controller.Button.A, state);         break;
+                case VirtualKey.Z:      console.Controller[0].SetState(Controller.Button.B, state);         break;
+                case VirtualKey.Q:      console.Controller[0].SetState(Controller.Button.Select, state);    break;
+                case VirtualKey.W:      console.Controller[0].SetState(Controller.Button.Start, state);     break;
+                case VirtualKey.Up:     console.Controller[0].SetState(Controller.Button.Up, state);        break;
+                case VirtualKey.Down:   console.Controller[0].SetState(Controller.Button.Down, state);      break;
+                case VirtualKey.Left:   console.Controller[0].SetState(Controller.Button.Left, state);      break;
+                case VirtualKey.Right:  console.Controller[0].SetState(Controller.Button.Right, state);     break;
+
+                case VirtualKey.N:      console.Controller[1].SetState(Controller.Button.A, state);         break;
+                case VirtualKey.B:      console.Controller[1].SetState(Controller.Button.B, state);         break;
+                case VirtualKey.I:      console.Controller[1].SetState(Controller.Button.Up, state);        break;
+                case VirtualKey.K:      console.Controller[1].SetState(Controller.Button.Down, state);      break;
+                case VirtualKey.J:      console.Controller[1].SetState(Controller.Button.Left, state);      break;
+                case VirtualKey.L:      console.Controller[1].SetState(Controller.Button.Right, state);     break;
+
+                case VirtualKey.Enter:  console.CPU.ToggleDebugLog();   break;
             }
         }
     }
