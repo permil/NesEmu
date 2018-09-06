@@ -85,7 +85,7 @@ namespace NesEmu
             { 0x15, (ORA, ZeroPageX, 4) },
             { 0x16, (ASL, ZeroPageX, 6) },
             { 0x18, (CLC, Implied, 2) },
-            { 0x19, (ORA, ZeroPageY, 4) },
+            { 0x19, (ORA, AbsoluteY, 4) },
             { 0x1D, (ORA, AbsoluteX, 4) },
             { 0x1E, (ASL, AbsoluteX, 7) },
             { 0x20, (JSR, Absolute, 6) },
